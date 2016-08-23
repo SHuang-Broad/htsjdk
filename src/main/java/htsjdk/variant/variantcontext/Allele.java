@@ -126,11 +126,38 @@ public class Allele implements Comparable<Allele>, Serializable {
 
     private byte[] bases = null;
 
+    private final static Allele REF_A = new Allele("A", true);
+    private final static Allele ALT_A = new Allele("A", false);
+    private final static Allele REF_C = new Allele("C", true);
+    private final static Allele ALT_C = new Allele("C", false);
+    private final static Allele REF_G = new Allele("G", true);
+    private final static Allele ALT_G = new Allele("G", false);
+    private final static Allele REF_T = new Allele("T", true);
+    private final static Allele ALT_T = new Allele("T", false);
+    private final static Allele REF_N = new Allele("N", true);
+    private final static Allele ALT_N = new Allele("N", false);
+
+    // ---------------------------------------------------------------------------------------------------------
+    //
+    // public convenience constants
+    //
+    // ---------------------------------------------------------------------------------------------------------
+
     /** A generic static NO_CALL allele for use */
     public final static String NO_CALL_STRING = ".";
 
     /** A generic static SPAN_DEL allele for use */
     public final static String SPAN_DEL_STRING = "*";
+
+    public final static Allele SPAN_DEL = new Allele(SPAN_DEL_STRING, false);
+
+    public final static Allele NO_CALL = new Allele(NO_CALL_STRING, false);
+
+    // ---------------------------------------------------------------------------------------------------------
+    //
+    // accessible to subclasses
+    //
+    // ---------------------------------------------------------------------------------------------------------
 
     // no public way to create an allele
     protected Allele(final byte[] bases, final boolean isRef) {
@@ -181,20 +208,6 @@ public class Allele implements Comparable<Allele>, Serializable {
         this.isNoCall = allele.isNoCall;
         this.isSymbolic = allele.isSymbolic;
     }
-
-
-    private final static Allele REF_A = new Allele("A", true);
-    private final static Allele ALT_A = new Allele("A", false);
-    private final static Allele REF_C = new Allele("C", true);
-    private final static Allele ALT_C = new Allele("C", false);
-    private final static Allele REF_G = new Allele("G", true);
-    private final static Allele ALT_G = new Allele("G", false);
-    private final static Allele REF_T = new Allele("T", true);
-    private final static Allele ALT_T = new Allele("T", false);
-    private final static Allele REF_N = new Allele("N", true);
-    private final static Allele ALT_N = new Allele("N", false);
-    public final static Allele SPAN_DEL = new Allele(SPAN_DEL_STRING, false);
-    public final static Allele NO_CALL = new Allele(NO_CALL_STRING, false);
 
     // ---------------------------------------------------------------------------------------------------------
     //
@@ -254,98 +267,6 @@ public class Allele implements Comparable<Allele>, Serializable {
     }
 
     /**
-     * @param bases  bases representing an allele
-     * @return true if the bases represent the null allele
-     */
-    public static boolean wouldBeNullAllele(final byte[] bases) {
-        return (bases.length == 1 && bases[0] == htsjdk.variant.vcf.VCFConstants.NULL_ALLELE) || bases.length == 0;
-    }
-
-    /**
-     * @param bases bases representing an allele
-     * @return true if the bases represent the SPAN_DEL allele
-     */
-    public static boolean wouldBeStarAllele(final byte[] bases) {
-        return bases.length == 1 && bases[0] == htsjdk.variant.vcf.VCFConstants.SPANNING_DELETION_ALLELE;
-    }
-
-    /**
-     * @param bases  bases representing an allele
-     * @return true if the bases represent the NO_CALL allele
-     */
-    public static boolean wouldBeNoCallAllele(final byte[] bases) {
-        return bases.length == 1 && bases[0] == htsjdk.variant.vcf.VCFConstants.NO_CALL_ALLELE;
-    }
-
-    /**
-     * @param bases  bases representing an allele
-     * @return true if the bases represent a symbolic allele
-     */
-    public static boolean wouldBeSymbolicAllele(final byte[] bases) {
-    	if ( bases.length <= 1 )
-            return false;
-        else {
-            final String strBases = new String(bases);
-            return (bases[0] == '<' || bases[bases.length-1] == '>') || // symbolic or large insertion
-            		(bases[0] == '.' || bases[bases.length-1] == '.') || // single breakend
-                    (strBases.contains("[") || strBases.contains("]")); // mated breakend
-        }
-    }
-
-    /**
-     * @param bases  bases representing a reference allele
-     * @return true if the bases represent the well formatted allele
-     */
-    public static boolean acceptableAlleleBases(final String bases) {
-        return acceptableAlleleBases(bases.getBytes(), true);
-    }
-
-    /**
-     * @param bases bases representing an allele
-     * @param isReferenceAllele is a reference allele
-     * @return true if the bases represent the well formatted allele
-     */
-    public static boolean acceptableAlleleBases(final String bases, boolean isReferenceAllele) {
-        return acceptableAlleleBases(bases.getBytes(), isReferenceAllele);
-    }
-
-    /**
-     * @param bases  bases representing a reference allele
-     * @return true if the bases represent the well formatted allele
-     */
-    public static boolean acceptableAlleleBases(final byte[] bases) {
-        return acceptableAlleleBases(bases, true);
-    }
-
-    /**
-     *
-     * @param bases bases representing an allele
-     * @param isReferenceAllele true if a reference allele
-     * @return true if the bases represent the well formatted allele
-     */
-    public static boolean acceptableAlleleBases(final byte[] bases, final boolean isReferenceAllele) {
-        if ( wouldBeNullAllele(bases) )
-            return false;
-
-        if ( wouldBeNoCallAllele(bases) || wouldBeSymbolicAllele(bases) )
-            return true;
-
-        if ( wouldBeStarAllele(bases) )
-            return !isReferenceAllele;
-
-        for (byte base :  bases ) {
-            switch (base) {
-                case 'A': case 'C': case 'G': case 'T':  case 'a': case 'c': case 'g': case 't': case 'N' : case 'n' :
-                    break;
-                default:
-                    return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
      * @see #Allele(byte[], boolean)
      *
      * @param bases  bases representing an allele
@@ -354,7 +275,6 @@ public class Allele implements Comparable<Allele>, Serializable {
     public static Allele create(final String bases, final boolean isRef) {
         return create(bases.getBytes(), isRef);
     }
-
 
     /**
      * Creates a non-Ref allele.  @see Allele(byte[], boolean) for full information
@@ -407,6 +327,7 @@ public class Allele implements Comparable<Allele>, Serializable {
     public boolean isSymbolic()         { return isSymbolic; }
 
     // Returns a nice string representation of this object
+    @Override
     public String toString() {
         return ( isNoCall() ? NO_CALL_STRING : getDisplayString() ) + (isReference() ? "*" : "");
     }
@@ -446,22 +367,33 @@ public class Allele implements Comparable<Allele>, Serializable {
     public byte[] getDisplayBases() { return bases; }
 
     /**
-     * @param other  the other allele
-     *
-     * @return true if these alleles are equal
-     */
-    public boolean equals(Object other) {
-        return ( ! (other instanceof Allele) ? false : equals((Allele)other, false) );
-    }
-
-    /**
      * @return hash code
      */
+    @Override
     public int hashCode() {
         int hash = 1;
         for (int i = 0; i < bases.length; i++)
             hash += (i+1) * bases[i];
         return hash;
+    }
+
+    public int compareTo(final Allele other) {
+        if ( isReference() && other.isNonReference() )
+            return -1;
+        else if ( isNonReference() && other.isReference() )
+            return 1;
+        else
+            return getBaseString().compareTo(other.getBaseString()); // todo -- potential performance issue
+    }
+
+    /**
+     * @param other  the other allele
+     *
+     * @return true if these alleles are equal
+     */
+    @Override
+    public boolean equals(Object other) {
+        return ( ! (other instanceof Allele) ? false : equals((Allele)other, false) );
     }
 
     /**
@@ -523,15 +455,6 @@ public class Allele implements Comparable<Allele>, Serializable {
             return null;    // couldn't find anything
     }
 
-    public int compareTo(final Allele other) {
-        if ( isReference() && other.isNonReference() )
-            return -1;
-        else if ( isNonReference() && other.isReference() ) 
-            return 1;
-        else
-            return getBaseString().compareTo(other.getBaseString()); // todo -- potential performance issue
-    }
-
     public static boolean oneIsPrefixOfOther(final Allele a1, final Allele a2) {
         if ( a2.length() >= a1.length() )
             return firstIsPrefixOfSecond(a1, a2);
@@ -542,5 +465,97 @@ public class Allele implements Comparable<Allele>, Serializable {
     private static boolean firstIsPrefixOfSecond(final Allele a1, final Allele a2) {
         String a1String = a1.getBaseString();
         return a2.getBaseString().substring(0, a1String.length()).equals(a1String);
+    }
+
+    /**
+     * @param bases  bases representing an allele
+     * @return true if the bases represent the null allele
+     */
+    public static boolean wouldBeNullAllele(final byte[] bases) {
+        return (bases.length == 1 && bases[0] == htsjdk.variant.vcf.VCFConstants.NULL_ALLELE) || bases.length == 0;
+    }
+
+    /**
+     * @param bases bases representing an allele
+     * @return true if the bases represent the SPAN_DEL allele
+     */
+    public static boolean wouldBeStarAllele(final byte[] bases) {
+        return bases.length == 1 && bases[0] == htsjdk.variant.vcf.VCFConstants.SPANNING_DELETION_ALLELE;
+    }
+
+    /**
+     * @param bases  bases representing an allele
+     * @return true if the bases represent the NO_CALL allele
+     */
+    public static boolean wouldBeNoCallAllele(final byte[] bases) {
+        return bases.length == 1 && bases[0] == htsjdk.variant.vcf.VCFConstants.NO_CALL_ALLELE;
+    }
+
+    /**
+     * @param bases  bases representing an allele
+     * @return true if the bases represent a symbolic allele
+     */
+    public static boolean wouldBeSymbolicAllele(final byte[] bases) {
+        if ( bases.length <= 1 )
+            return false;
+        else {
+            final String strBases = new String(bases);
+            return (bases[0] == '<' || bases[bases.length-1] == '>') || // symbolic or large insertion
+                    (bases[0] == '.' || bases[bases.length-1] == '.') || // single breakend
+                    (strBases.contains("[") || strBases.contains("]")); // mated breakend
+        }
+    }
+
+    /**
+     * @param bases  bases representing a reference allele
+     * @return true if the bases represent the well formatted allele
+     */
+    public static boolean acceptableAlleleBases(final String bases) {
+        return acceptableAlleleBases(bases.getBytes(), true);
+    }
+
+    /**
+     * @param bases bases representing an allele
+     * @param isReferenceAllele is a reference allele
+     * @return true if the bases represent the well formatted allele
+     */
+    public static boolean acceptableAlleleBases(final String bases, boolean isReferenceAllele) {
+        return acceptableAlleleBases(bases.getBytes(), isReferenceAllele);
+    }
+
+    /**
+     * @param bases  bases representing a reference allele
+     * @return true if the bases represent the well formatted allele
+     */
+    public static boolean acceptableAlleleBases(final byte[] bases) {
+        return acceptableAlleleBases(bases, true);
+    }
+
+    /**
+     *
+     * @param bases bases representing an allele
+     * @param isReferenceAllele true if a reference allele
+     * @return true if the bases represent the well formatted allele
+     */
+    public static boolean acceptableAlleleBases(final byte[] bases, final boolean isReferenceAllele) {
+        if ( wouldBeNullAllele(bases) )
+            return false;
+
+        if ( wouldBeNoCallAllele(bases) || wouldBeSymbolicAllele(bases) )
+            return true;
+
+        if ( wouldBeStarAllele(bases) )
+            return !isReferenceAllele;
+
+        for (byte base :  bases ) {
+            switch (base) {
+                case 'A': case 'C': case 'G': case 'T':  case 'a': case 'c': case 'g': case 't': case 'N' : case 'n' :
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        return true;
     }
 }
