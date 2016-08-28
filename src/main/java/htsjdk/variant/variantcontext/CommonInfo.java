@@ -44,20 +44,26 @@ import java.util.Set;
  *
  * @author depristo
  */
+// TODO: should this class be package access?
 public final class CommonInfo implements Serializable {
     public static final long serialVersionUID = 1L;
 
     public static final double NO_LOG10_PERROR = 1.0;
 
-    private static Set<String> NO_FILTERS = Collections.emptySet();
-    private static Map<String, Object> NO_ATTRIBUTES = Collections.unmodifiableMap(new HashMap<String, Object>());
+    private static final Set<String> NO_FILTERS = Collections.emptySet();
+    private static final Map<String, Object> NO_ATTRIBUTES = Collections.unmodifiableMap(new HashMap<String, Object>());
 
     private double log10PError = NO_LOG10_PERROR;
     private String name = null;
     private Set<String> filters = null;
     private Map<String, Object> attributes = NO_ATTRIBUTES;
 
-    public CommonInfo(String name, double log10PError, Set<String> filters, Map<String, Object> attributes) {
+    // TODO: why the asymmetric argument checks between filters and attributes? shouldn't an exception be thrown with null attributes?
+    /**
+     * @throws IllegalArgumentException if  1) {@code log10PError} is positive and at the same time not {@link #NO_LOG10_PERROR}
+     *                                      2) the log10PError contained in this instance is either NaN or {@link Double#isInfinite()}
+     */
+    public CommonInfo(final String name, final double log10PError, final Set<String> filters, final Map<String, Object> attributes) {
         this.name = name;
         setLog10PError(log10PError);
         this.filters = filters;
@@ -66,23 +72,14 @@ public final class CommonInfo implements Serializable {
         }
     }
 
-    /**
-     * @return the name
-     */
     public String getName() {
         return name;
     }
 
-    /**
-     * Sets the name
-     *
-     * @param name    the name associated with this information
-     */
     public void setName(String name) {
         if ( name == null ) throw new IllegalArgumentException("Name cannot be null " + this);
         this.name = name;
     }
-
 
     // ---------------------------------------------------------------------------------------------------------
     //
@@ -90,10 +87,16 @@ public final class CommonInfo implements Serializable {
     //
     // ---------------------------------------------------------------------------------------------------------
 
+    // TODO: should this be deprecated and be replaced with getFilters() which never returns null?
+    //       this may change how related functions and structs/fields are initialized
     public Set<String> getFiltersMaybeNull() {
         return filters;
     }
 
+    /**
+     * @return  Un-modifiable view of filters associated with this information.
+     *          Never {@code null}, but may be {@link #NO_FILTERS}.
+     */
     public Set<String> getFilters() {
         return filters == null ? NO_FILTERS : Collections.unmodifiableSet(filters);
     }
@@ -103,25 +106,32 @@ public final class CommonInfo implements Serializable {
     }
 
     public boolean isFiltered() {
-        return filters == null ? false : !filters.isEmpty();
+        return filters != null && !filters.isEmpty();
     }
 
     public boolean isNotFiltered() {
         return ! isFiltered();
     }
 
-    public void addFilter(String filter) {
-        if ( filters == null ) // immutable -> mutable
-            filters = new HashSet<String>();
-
+    /**
+     * @throws IllegalArgumentException when {@code filter} is {@code null}
+     */
+    public void addFilter(final String filter) {
         if ( filter == null ) throw new IllegalArgumentException("BUG: Attempting to add null filter " + this);
+        // TODO: should this throw or simply warn?
         if ( getFilters().contains(filter) ) throw new IllegalArgumentException("BUG: Attempting to add duplicate filter " + filter + " at " + this);
+        if ( filters == null ) // TODO: is this comment a warning sign?: immutable -> mutable
+            filters = new HashSet<>();
+
         filters.add(filter);
     }
 
-    public void addFilters(Collection<String> filters) {
+    /**
+     * @throws IllegalArgumentException when {@code filters} is {@code null} or when filters to be added are already put in
+     */
+    public void addFilters(final Collection<String> filters) {
         if ( filters == null ) throw new IllegalArgumentException("BUG: Attempting to add null filters at" + this);
-        for ( String f : filters )
+        for ( final String f : filters )
             addFilter(f);
     }
 
@@ -151,7 +161,13 @@ public final class CommonInfo implements Serializable {
      */
     public double getPhredScaledQual() { return (getLog10PError() * -10) + 0.0; }
 
-    public void setLog10PError(double log10PError) {
+    /**
+     * TODO: why checks this instance's log10PError while assigning? And why IllegalArgumentException?
+     * @param log10PError
+     * @throws IllegalArgumentException if  1) {@code log10PError} is positive and at the same time not {@link #NO_LOG10_PERROR}
+     *                                      2) the log10PError contained in this instance is either NaN or {@link Double#isInfinite()}
+     */
+    public void setLog10PError(final double log10PError) {
         if ( log10PError > 0 && log10PError != NO_LOG10_PERROR)
             throw new IllegalArgumentException("BUG: log10PError cannot be > 0 : " + this.log10PError);
         if ( Double.isInfinite(this.log10PError) )
@@ -166,50 +182,59 @@ public final class CommonInfo implements Serializable {
     // Working with attributes
     //
     // ---------------------------------------------------------------------------------------------------------
+
+    // TODO: should the following be
+    // if(attributes!=NO_ATTRIBUTES) attributes = new HashMap<>();
     public void clearAttributes() {
-        attributes = new HashMap<String, Object>();
+        attributes = new HashMap<>();
     }
 
-    /**
-     * @return the attribute map
-     */
-    public Map<String, Object> getAttributes() {
-        return Collections.unmodifiableMap(attributes);
-    }
-
+    // TODO for a todo: is the following todo still worth it? should some enums in Genotype and VariantContext be moved here?
     // todo -- define common attributes as enum
 
-    public void setAttributes(Map<String, ?> map) {
+    /**
+     *
+     * @param map
+     */
+    public void setAttributes(final Map<String, ?> map) {
         clearAttributes();
         putAttributes(map);
     }
 
-    public void putAttribute(String key, Object value) {
+    public void putAttribute(final String key, final Object value) {
         putAttribute(key, value, false);
     }
 
-    public void putAttribute(String key, Object value, boolean allowOverwrites) {
+    /**
+     * @throws IllegalArgumentException if {@code allowOverwrites} is {@code false} and the {@code key} is already associated with a value
+     */
+    public void putAttribute(final String key, final Object value, final boolean allowOverwrites) {
         if ( ! allowOverwrites && hasAttribute(key) )
             throw new IllegalStateException("Attempting to overwrite key->value binding: key = " + key + " this = " + this);
 
         if ( attributes == NO_ATTRIBUTES ) // immutable -> mutable
-            attributes = new HashMap<String, Object>();
+            attributes = new HashMap<>();
 
         attributes.put(key, value);
     }
 
-    public void removeAttribute(String key) {
+    // TODO: edge case "bug": if attributes was no_attributes before, calling this method would change that, though nothing is removed.
+    public void removeAttribute(final String key) {
         if ( attributes == NO_ATTRIBUTES ) // immutable -> mutable
-            attributes = new HashMap<String, Object>();
+            attributes = new HashMap<>();
         attributes.remove(key);
     }
 
-    public void putAttributes(Map<String, ?> map) {
+    // TODO: shouldn't exception be thrown here with null input?
+    /**
+     * @throws IllegalArgumentException if the input map has any non-empty intersection with the attribute map currently hold by this instance
+     */
+    public void putAttributes(final Map<String, ?> map) {
         if ( map != null ) {
             // for efficiency, we can skip the validation if the map is empty
             if (attributes.isEmpty()) {
                 if ( attributes == NO_ATTRIBUTES ) // immutable -> mutable
-                    attributes = new HashMap<String, Object>();
+                    attributes = new HashMap<>();
                 attributes.putAll(map);
             } else {
                 for ( Map.Entry<String, ?> elt : map.entrySet() ) {
@@ -219,7 +244,7 @@ public final class CommonInfo implements Serializable {
         }
     }
 
-    public boolean hasAttribute(String key) {
+    public boolean hasAttribute(final String key) {
         return attributes.containsKey(key);
     }
 
@@ -228,48 +253,71 @@ public final class CommonInfo implements Serializable {
     }
 
     /**
+     * @return an un-modifiable view of attribute map
+     */
+    public Map<String, Object> getAttributes() {
+        return Collections.unmodifiableMap(attributes);
+    }
+
+    /**
      * @param key    the attribute key
      *
      * @return the attribute value for the given key (or null if not set)
      */
-    public Object getAttribute(String key) {
+    public Object getAttribute(final String key) {
         return attributes.get(key);
     }
 
-    public Object getAttribute(String key, Object defaultValue) {
+    public Object getAttribute(final String key, final Object defaultValue) {
         if ( hasAttribute(key) )
             return attributes.get(key);
         else
             return defaultValue;
     }
 
-    /** returns the value as an empty list if the key was not found,
-        as a java.util.List if the value is a List or an Array,
-        as a Collections.singletonList if there is only one value */
+    /**
+     * @return  an empty list if key was not found
+     *          a singleton list if there's only one value
+     *          a list if the value is a list of array
+     */
     @SuppressWarnings("unchecked")
-    public List<Object> getAttributeAsList(String key) {
-        Object o = getAttribute(key);
+    public List<Object> getAttributeAsList(final String key) {
+        final Object o = getAttribute(key);
         if ( o == null ) return Collections.emptyList();
         if ( o instanceof List ) return (List<Object>)o;
         if ( o.getClass().isArray() ) return Arrays.asList((Object[])o);
         return Collections.singletonList(o);
     }
 
-    public String getAttributeAsString(String key, String defaultValue) {
+    /**
+     * @return {@code defaultValue} if {@code key} map to {@code null},
+     *          otherwise the normal behavior as defined by the associated value object's toString() method
+     */
+    public String getAttributeAsString(final String key, final String defaultValue) {
         Object x = getAttribute(key);
         if ( x == null ) return defaultValue;
-        if ( x instanceof String ) return (String)x;
+        if ( x instanceof String ) return (String)x; // TODO: String.valueOf() throws?
         return String.valueOf(x); // throws an exception if this isn't a string
     }
 
-    public int getAttributeAsInt(String key, int defaultValue) {
+    /**
+     * @return {@code defaultValue} if {@code key} map to {@code null}, otherwise the normal behavior.
+     * @throws ClassCastException if the associated value cannot be casted to a {@link String}.
+     * @throws NumberFormatException if the associated value cannot be parsed by {@link Integer#valueOf(String)}.
+     */
+    public int getAttributeAsInt(final String key, final int defaultValue) {
         Object x = getAttribute(key);
         if ( x == null || x == VCFConstants.MISSING_VALUE_v4 ) return defaultValue;
         if ( x instanceof Integer ) return (Integer)x;
         return Integer.valueOf((String)x); // throws an exception if this isn't a string
     }
 
-    public double getAttributeAsDouble(String key, double defaultValue) {
+    /**
+     * @return {@code defaultValue} if {@code key} map to {@code null}, otherwise the normal behavior.
+     * @throws ClassCastException if the associated value cannot be casted to a {@link String}.
+     * @throws NumberFormatException if the associated value cannot be parsed by {@link Double#valueOf(String)}.
+     */
+    public double getAttributeAsDouble(final String key, final double defaultValue) {
         Object x = getAttribute(key);
         if ( x == null ) return defaultValue;
         if ( x instanceof Double ) return (Double)x;
@@ -277,7 +325,11 @@ public final class CommonInfo implements Serializable {
         return Double.valueOf((String)x); // throws an exception if this isn't a string
     }
 
-    public boolean getAttributeAsBoolean(String key, boolean defaultValue) {
+    /**
+     * @return {@code defaultValue} if {@code key} map to {@code null}, otherwise the normal behavior.
+     * @throws ClassCastException if the associated value cannot be casted to a {@link String}.
+     */
+    public boolean getAttributeAsBoolean(final String key, final boolean defaultValue) {
         Object x = getAttribute(key);
         if ( x == null ) return defaultValue;
         if ( x instanceof Boolean ) return (Boolean)x;
