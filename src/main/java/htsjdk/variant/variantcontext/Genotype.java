@@ -467,10 +467,7 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
     }
 
     /**
-     * Same as #getExtendedAttribute with a null default
-     *
-     * @param key
-     * @return
+     * Same as {@link #getExtendedAttribute(String, Object)} with a null default
      */
     public Object getExtendedAttribute(final String key) {
         return getExtendedAttribute(key, null);
@@ -540,16 +537,12 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
             return getGQ();
         } else if (key.equals(VCFConstants.GENOTYPE_ALLELE_DEPTHS)) {
             if (hasAD()) {
-                final List<Integer> intList = new ArrayList<Integer>(getAD().length);
-                for(int i : getAD()) intList.add(i);
-                return intList;
+                return Arrays.asList(getAD());
             }
             return Collections.EMPTY_LIST;
         } else if (key.equals(VCFConstants.GENOTYPE_PL_KEY)) {
             if (hasPL()) {
-                final List<Integer> intList = new ArrayList<Integer>(getPL().length);
-                for(int i : getPL()) intList.add(i);
-                return intList;
+                return Arrays.asList(getPL());
             }
             return Collections.EMPTY_LIST;
         } else if (key.equals(VCFConstants.DEPTH_KEY)) {
