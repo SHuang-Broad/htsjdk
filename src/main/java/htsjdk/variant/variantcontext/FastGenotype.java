@@ -38,19 +38,19 @@ import java.util.Map;
  *
  * <ul>
  * <li> a sample name, must be a non-null string</li>
- * <li> an ordered list of alleles, intrepreted as the genotype of the sample,
+ * <li> an ordered list of alleles, interpreted as the genotype of the sample,
  *    each allele for each chromosome given in order.  If alleles = [a*, t]
  *    then the sample is a/t, with a (the reference from the *) the first
  *    chromosome and t on the second chromosome</li>
  * <li> an <code>isPhased</code> marker indicating where the alleles are phased with respect to some global
- *    coordinate system.  See VCF4.1 spec for a detailed discussion</li>
+ *    coordinate system.  See https://samtools.github.io/hts-specs/ for a detailed discussion</li>
  * <li> Inline, optimized <code>int</code>s and <code>int[]</code> values for:
  * <ul>
  *      <li> GQ: the phred-scaled genotype quality, or <code>-1</code> if it's missing</li>
  *      <li> DP: the count of reads at this locus for this sample, or <code>-1</code> if missing</li>
  *      <li> AD: an array of counts of reads at this locus, one for each Allele at the site,
  *             that is, for each allele in the surrounding <code>VariantContext</code>.  <code>null</code> if missing.</li>
- *      <li> PL: phred-scaled genotype likelihoods in standard VCF4.1 order for
+ *      <li> PL: phred-scaled genotype likelihoods in standard VCF order for
  *             all combinations of the alleles in the surrounding <code>VariantContext</code>, given
  *             the ploidy of the sample (from the alleles vector).  <code>null</code> if missing.</li>
  * </ul>
@@ -67,8 +67,9 @@ import java.util.Map;
  * sets pass through invalid states that are not permitted in a fully formed immutable
  * <code>Genotype</code>.</p>
  *
- * <p>Note this is a simplified, refactored Genotype object based on the original
- * generic (and slow) implementation from the original VariantContext + Genotype
+ * TODO: should the following be removed?
+ * <p>Note this is a simplified, refactored <code>Genotype</code> object based on the original
+ * generic (and slow) implementation from the original <code>VariantContext</code> + <code>Genotype</code>
  * codebase.</p>
  *
  * @author Mark DePristo
@@ -85,15 +86,6 @@ public final class FastGenotype extends Genotype {
 
     /**
      * The only way to make one of these, for use by GenotypeBuilder only
-     *
-     * @param sampleName
-     * @param alleles
-     * @param isPhased
-     * @param GQ
-     * @param DP
-     * @param AD
-     * @param PL
-     * @param extendedAttributes
      */
     protected FastGenotype(final String sampleName,
                            final List<Allele> alleles,
@@ -116,7 +108,7 @@ public final class FastGenotype extends Genotype {
 
     // ---------------------------------------------------------------------------------------------------------
     //
-    // Implmenting the abstract methods
+    // Implementing the abstract methods
     //
     // ---------------------------------------------------------------------------------------------------------
 
@@ -148,20 +140,13 @@ public final class FastGenotype extends Genotype {
         return PL;
     }
 
-    // ---------------------------------------------------------------------------------------------------------
-    // 
-    // get routines for extended attributes
-    //
-    // ---------------------------------------------------------------------------------------------------------
-
-    public Map<String, Object> getExtendedAttributes() {
+    @Override public Map<String, Object> getExtendedAttributes() {
         return extendedAttributes;
     }
 
     /**
+     * TODO: if values is null, current implementation returns true. is this correct? plus this private method is not used so should probably be removed.
      * Is values a valid AD or PL field
-     * @param values
-     * @return
      */
     private static boolean validADorPLField(final int[] values) {
         if ( values != null )
