@@ -25,10 +25,6 @@
 
 package htsjdk.variant.variantcontext;
 
-
-// the imports for unit testing.
-
-
 import htsjdk.variant.VariantBaseTest;
 import htsjdk.variant.vcf.VCFConstants;
 import org.testng.Assert;

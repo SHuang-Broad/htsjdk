@@ -37,6 +37,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 /**
  * This class encompasses all the basic information about a genotype.  It is immutable.
@@ -59,8 +60,8 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
             VCFConstants.GENOTYPE_ALLELE_DEPTHS,
             VCFConstants.GENOTYPE_PL_KEY);
 
-    public final static String PHASED_ALLELE_SEPARATOR = "|";
-    public final static String UNPHASED_ALLELE_SEPARATOR = "/";
+    public final static String PHASED_ALLELE_SEPARATOR = VCFConstants.PHASED;
+    public final static String UNPHASED_ALLELE_SEPARATOR = VCFConstants.UNPHASED;
 
     private final String sampleName;
     private GenotypeType type = null;
@@ -200,7 +201,8 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
         if ( alleles.isEmpty() )
             return GenotypeType.UNAVAILABLE;
 
-        boolean sawNoCall = false, sawMultipleAlleles = false;
+        boolean sawNoCall = false;
+        boolean sawMultipleAlleles = false;
         Allele observedAllele = null;
 
         for ( final Allele allele : alleles ) {
@@ -218,7 +220,7 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
             return GenotypeType.MIXED;
         }
 
-        if ( observedAllele == null )
+        if ( observedAllele == null ) // TODO: should this be an IllegalStateException or RuntimeException?
             throw new IllegalStateException("BUG: there are no alleles present in this genotype but the alleles list is not null");
 
         return sawMultipleAlleles ? GenotypeType.HET : observedAllele.isReference() ? GenotypeType.HOM_REF : GenotypeType.HOM_VAR;
@@ -227,7 +229,7 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
     /**
      * @return true if all observed alleles are the same (regardless of whether they are ref or alt); if any alleles are no-calls, this method will return false.
      */
-    public boolean isHom()    { return isHomRef() || isHomVar(); }
+    public boolean isHom() { return isHomRef() || isHomVar(); }
 
     /**
      * @return true if all observed alleles are ref; if any alleles are no-calls, this method will return false.
@@ -284,7 +286,7 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
 
     /**
      * Convenience function that returns a string representation of the PL field of this
-     * genotype, or . if none is available.
+     * genotype, or {@link VCFConstants#MISSING_VALUE_v4} if none is available.
      *
      * @return a non-null String representation for the PL of this sample
      */
@@ -351,7 +353,7 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
      *
      * If ignoreRefState is true, will not append the reference * marker on the alleles.
      *
-     * @return a string representing the genotypes, or null if the type is unavailable.
+     * @return a string representing the genotype, or "NA" if ploidy is 0, or null if the type is unavailable.
      */
     public String getGenotypeString(boolean ignoreRefState) {
         if ( getPloidy() == 0 )
@@ -374,11 +376,7 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
      * @return
      */
     protected List<String> getAlleleStrings() {
-        final List<String> al = new ArrayList<String>(getPloidy());
-        for ( Allele a : getAlleles() )
-            al.add(a.getBaseString());
-
-        return al;
+        return getAlleles().stream().map(Allele::getBaseString).collect(Collectors.toList());
     }
 
     public String toString() {
@@ -599,20 +597,15 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
     protected static <T extends Comparable<T>, V> String sortedString(Map<T, V> c) {
 
         // NOTE -- THIS IS COPIED FROM GATK UTILS TO ALLOW US TO KEEP A SEPARATION BETWEEN THE GATK AND VCF CODECS
-        final List<T> t = new ArrayList<T>(c.keySet());
-        Collections.sort(t);
-
-        final List<String> pairs = new ArrayList<String>();
-        for (final T k : t) {
-            pairs.add(k + "=" + c.get(k));
-        }
+        final List<T> t = c.keySet().stream().sorted().collect(Collectors.toList());
+        final List<String> pairs = t.stream().map( k -> (k + "=" + c.get(k))).collect(Collectors.toList());
 
         return pairs.isEmpty() ? "" : " {" + ParsingUtils.join(", ", pairs.toArray(new String[pairs.size()])) + "}";
     }
 
     /**
      * Returns a display name for field name with value v if this isn't -1.  Otherwise returns ""
-     * @param name of the field ("AD")
+     * @param name of the field (e.g. "AD")
      * @param v the value of the field, or -1 if missing
      * @return a non-null string for display if the field is not missing
      */
@@ -622,7 +615,7 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
 
     /**
      * Returns a display name for field name with String value v if this isn't null.  Otherwise returns ""
-     * @param name of the field ("FT")
+     * @param name of the field (e.g. "FT")
      * @param v the value of the field, or null if missing
      * @return a non-null string for display if the field is not missing
      */
@@ -632,7 +625,7 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
 
     /**
      * Returns a display name for field name with values vs if this isn't null.  Otherwise returns ""
-     * @param name of the field ("AD")
+     * @param name of the field (e.g. "AD")
      * @param vs the value of the field, or null if missing
      * @return a non-null string for display if the field is not missing
      */
@@ -640,7 +633,7 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
         if ( vs == null )
             return "";
         else {
-            StringBuilder b = new StringBuilder();
+            final StringBuilder b = new StringBuilder();
             b.append(' ').append(name).append(' ');
             for ( int i = 0; i < vs.length; i++ ) {
                 if ( i != 0 ) b.append(',');
@@ -651,6 +644,7 @@ public abstract class Genotype implements Comparable<Genotype>, Serializable {
     }
 
     /**
+     * TODO: could this be moved to CommonInfo?
      * Does the attribute map have a mapping involving a forbidden key (i.e.,
      * one that's managed inline by this Genotypes object?
      *
