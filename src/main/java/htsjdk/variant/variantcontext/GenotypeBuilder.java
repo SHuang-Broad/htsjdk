@@ -38,22 +38,21 @@ import java.util.Map;
 /**
  * A builder class for genotypes
  *
- * Provides convenience setter methods for all of the Genotype field
- * values.  Setter methods can be used in any order, allowing you to
- * pass through states that wouldn't be allowed in the highly regulated
- * immutable Genotype class.
+ * Provides convenience setter methods for all of the Genotype field values.
+ * Setter methods can be used in any order, allowing you to pass through
+ * states that wouldn't be allowed in the highly regulated immutable Genotype class.
  *
  * All fields default to meaningful MISSING values.
  *
- * Call make() to actually create the corresponding Genotype object from
+ * Call {@link #make()} to actually create the corresponding {@link Genotype} object from
  * this builder.  Can be called multiple times to create independent copies,
  * or with intervening sets to conveniently make similar Genotypes with
  * slight modifications.
  *
- * Re-using the same GenotypeBuilder to build multiple Genotype objects via calls
+ * Re-using the same {@link GenotypeBuilder} to build multiple {@link Genotype} objects via calls
  * to make() is dangerous, since reference types in the builder (eg., Collections/arrays)
  * don't get copied when making each Genotype. To safely re-use the same builder object
- * multiple times, use makeWithShallowCopy() instead of make().
+ * multiple times, use {@link #makeWithShallowCopy()} instead of {@link #make()}.
  *
  * @author Mark DePristo
  * @since 06/12
@@ -88,14 +87,14 @@ public final class GenotypeBuilder {
     }
 
     public static Genotype create(final String sampleName,
-                                        final List<Allele> alleles,
-                                        final Map<String, Object> attributes) {
+                                  final List<Allele> alleles,
+                                  final Map<String, Object> attributes) {
         return new GenotypeBuilder(sampleName, alleles).attributes(attributes).make();
     }
 
     protected static Genotype create(final String sampleName,
-                                           final List<Allele> alleles,
-                                           final double[] gls) {
+                                     final List<Allele> alleles,
+                                     final double[] gls) {
         return new GenotypeBuilder(sampleName, alleles).PL(gls).make();
     }
 
@@ -142,8 +141,7 @@ public final class GenotypeBuilder {
     }
 
     /**
-     * Create a new builder starting with the values in Genotype g
-     * @param g
+     * Create a new builder starting with the values in Genotype {@code g}
      */
     public GenotypeBuilder(final Genotype g) {
         copy(g);
@@ -188,7 +186,7 @@ public final class GenotypeBuilder {
      * Create a new Genotype object using the values set in this builder.
      *
      * After creation the values in this builder can be modified and more Genotypes
-     * created, althrough the contents of array values like PL should never be modified
+     * created, although the contents of array values like PL should never be modified
      * inline as they are not copied for efficiency reasons.
      *
      * Note: if attributes are added via this builder after a call to make(), the new Genotype will
@@ -221,8 +219,6 @@ public final class GenotypeBuilder {
 
     /**
      * Set this genotype's name
-     * @param sampleName
-     * @return
      */
     public GenotypeBuilder name(final String sampleName) {
         this.sampleName = sampleName;
@@ -231,8 +227,6 @@ public final class GenotypeBuilder {
 
     /**
      * Set this genotype's alleles
-     * @param alleles
-     * @return
      */
     public GenotypeBuilder alleles(final List<Allele> alleles) {
         if ( alleles == null )
@@ -243,9 +237,7 @@ public final class GenotypeBuilder {
     }
 
     /**
-     * Is this genotype phased?
-     * @param phased
-     * @return
+     * Set this genotype's phasing state as provided.
      */
     public GenotypeBuilder phased(final boolean phased) {
         isPhased = phased;
@@ -257,10 +249,8 @@ public final class GenotypeBuilder {
         return this;
     }
 
-    /**  Set the GQ with a log10PError value
-     *
-     * @param pLog10Error
-     * @return
+    /**
+     * Set the GQ with a log10PError value
      */
     public GenotypeBuilder log10PError(final double pLog10Error) {
         if ( pLog10Error == CommonInfo.NO_LOG10_PERROR )
@@ -271,31 +261,26 @@ public final class GenotypeBuilder {
 
     /**
      * This genotype has no GQ value
-     * @return
      */
     public GenotypeBuilder noGQ() { GQ = -1; return this; }
 
     /**
      * This genotype has no AD value
-     * @return
      */
     public GenotypeBuilder noAD() { AD = null; return this; }
 
     /**
      * This genotype has no DP value
-     * @return
      */
     public GenotypeBuilder noDP() { DP = -1; return this; }
 
     /**
      * This genotype has no PL value
-     * @return
      */
     public GenotypeBuilder noPL() { PL = null; return this; }
 
     /**
      * This genotype has this DP value
-     * @return
      */
     public GenotypeBuilder DP(final int DP) {
         this.DP = DP;
@@ -304,7 +289,6 @@ public final class GenotypeBuilder {
 
     /**
      * This genotype has this AD value
-     * @return
      */
     public GenotypeBuilder AD(final int[] AD) {
         this.AD = AD;
@@ -313,7 +297,6 @@ public final class GenotypeBuilder {
 
     /**
      * This genotype has this PL value, as int[].  FAST
-     * @return
      */
     public GenotypeBuilder PL(final int[] PL) {
         this.PL = PL;
@@ -322,7 +305,6 @@ public final class GenotypeBuilder {
 
     /**
      * This genotype has this PL value, converted from double[]. SLOW
-     * @return
      */
     public GenotypeBuilder PL(final double[] GLs) {
         this.PL = GenotypeLikelihoods.fromLog10Likelihoods(GLs).getAsPLs();
@@ -332,19 +314,16 @@ public final class GenotypeBuilder {
     /**
      * This genotype has these attributes. Attributes are added to previous ones.
      *
-     * Cannot contain inline attributes (DP, AD, GQ, PL). Note: this is not checked
-     * @return
+     * Cannot contain inline attributes (DP, AD, GQ, PL). Note: this is not checked TODO: should this be changed?
      */
     public GenotypeBuilder attributes(final Map<String, Object> attributes) {
-        for ( Map.Entry<String, Object> pair : attributes.entrySet() )
+        for ( final Map.Entry<String, Object> pair : attributes.entrySet() )
             attribute(pair.getKey(), pair.getValue());
         return this;
     }
 
     /**
      * Tells this builder to remove all extended attributes
-     *
-     * @return
      */
     public GenotypeBuilder noAttributes() {
         this.extendedAttributes = null;
@@ -359,7 +338,7 @@ public final class GenotypeBuilder {
      */
     public GenotypeBuilder attribute(final String key, final Object value) {
         if ( extendedAttributes == null )
-            extendedAttributes = new HashMap<String, Object>(initialAttributeMapSize);
+            extendedAttributes = new HashMap<>(initialAttributeMapSize);
         extendedAttributes.put(key, value);
         return this;
     }
@@ -383,8 +362,6 @@ public final class GenotypeBuilder {
 
     /**
      * varargs version of #filters
-     * @param filters
-     * @return
      */
     public GenotypeBuilder filters(final String ... filters) {
         return filters(Arrays.asList(filters));
@@ -394,7 +371,6 @@ public final class GenotypeBuilder {
      * Most efficient version of setting filters -- just set the filters string to filters
      *
      * @param filter if filters == null or filters.equals("PASS") =&gt; genotype is PASS
-     * @return
      */
     public GenotypeBuilder filter(final String filter) {
         this.filters = VCFConstants.PASSES_FILTERS_v4.equals(filter) ? null : filter;
@@ -403,8 +379,6 @@ public final class GenotypeBuilder {
 
     /**
      * This genotype is unfiltered
-     *
-     * @return
      */
     public GenotypeBuilder unfiltered() {
         return filter(null);
@@ -412,7 +386,6 @@ public final class GenotypeBuilder {
 
     /**
      * Tell's this builder that we have at most these number of attributes
-     * @return
      */
     public GenotypeBuilder maxAttributes(final int i) {
         initialAttributeMapSize = i;

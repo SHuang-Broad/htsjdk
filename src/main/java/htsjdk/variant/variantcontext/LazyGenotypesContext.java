@@ -32,10 +32,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Lazy-loading GenotypesContext.  A lazy-loading context has access to the
+ * Lazy-loading {@link GenotypesContext}.  A lazy-loading context has access to the
  * VCFParser and a unparsed string of genotype data.  If the user attempts to manipulate
  * the genotypes contained in this context, we decode the data and become a full blown
- * GenotypesContext.  However, if the user never does this we are spared a lot of expense
+ * {@link GenotypesContext}.  However, if the user never does this we are spared a lot of expense
  * decoding the genotypes unnecessarily.
  */
 public class LazyGenotypesContext extends GenotypesContext {
