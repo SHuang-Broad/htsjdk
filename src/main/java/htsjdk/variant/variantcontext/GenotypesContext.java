@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Represents an ordered collection of Genotype objects
@@ -40,10 +41,10 @@ public class GenotypesContext implements List<Genotype>, Serializable {
      * static constant value for an empty GenotypesContext.  Useful since so many VariantContexts have no genotypes
      */
     public final static GenotypesContext NO_GENOTYPES =
-            new GenotypesContext(new ArrayList<Genotype>(0), new HashMap<String, Integer>(0), Collections.<String>emptyList()).immutable();
+            new GenotypesContext(new ArrayList<>(0), new HashMap<>(0), Collections.<String>emptyList()).immutable();
 
     /**
-     *sampleNamesInOrder a list of sample names, one for each genotype in genotypes, sorted in alphabetical order
+     * a list of sample names, one for each genotype in genotypes, sorted in alphabetical order
      */
     protected List<String> sampleNamesInOrder = null;
 
@@ -68,6 +69,8 @@ public class GenotypesContext implements List<Genotype>, Serializable {
      */
     private int maxPloidy = -1;
 
+    // TODO: some code in CommonInfo were marked with immutable -> mutable, are those code refactored from this GenotypesContext class
+    //       and the comments were forgotten to be taken out?
     /** Are we allowing users to modify the list? */
     private boolean immutable = false;
 
@@ -108,7 +111,7 @@ public class GenotypesContext implements List<Genotype>, Serializable {
      * Create an empty GenotypeContext, with initial capacity for n elements
      */
     protected GenotypesContext(final int n) {
-        this(new ArrayList<Genotype>(n));
+        this(new ArrayList<>(n));
     }
 
     /**
@@ -131,8 +134,8 @@ public class GenotypesContext implements List<Genotype>, Serializable {
      * order.
      */
     protected GenotypesContext(final ArrayList<Genotype> genotypes,
-                             final Map<String, Integer> sampleNameToOffset,
-                             final List<String> sampleNamesInOrder) {
+                               final Map<String, Integer> sampleNameToOffset,
+                               final List<String> sampleNamesInOrder) {
         this.notToBeDirectlyAccessedGenotypes = genotypes;
         this.sampleNameToOffset = sampleNameToOffset;
         this.sampleNamesInOrder = sampleNamesInOrder;
@@ -195,7 +198,7 @@ public class GenotypesContext implements List<Genotype>, Serializable {
      * @return an mutable GenotypeContext containing genotypes
      */
     public static final GenotypesContext create(final Genotype... genotypes) {
-        return create(new ArrayList<Genotype>(Arrays.asList(genotypes)));
+        return create(new ArrayList<>(Arrays.asList(genotypes)));
     }
 
     /**
@@ -205,7 +208,7 @@ public class GenotypesContext implements List<Genotype>, Serializable {
      * @return an mutable GenotypeContext containing genotypes
      */
     public static final GenotypesContext copy(final GenotypesContext toCopy) {
-        return create(new ArrayList<Genotype>(toCopy.getGenotypes()));
+        return create(new ArrayList<>(toCopy.getGenotypes()));
     }
 
     /**
@@ -216,7 +219,7 @@ public class GenotypesContext implements List<Genotype>, Serializable {
      * @return an mutable GenotypeContext containing genotypes
      */
     public static final GenotypesContext copy(final Collection<Genotype> toCopy) {
-        return toCopy == null ? NO_GENOTYPES : create(new ArrayList<Genotype>(toCopy));
+        return toCopy == null ? NO_GENOTYPES : create(new ArrayList<>(toCopy));
     }
 
     // ---------------------------------------------------------------------------
@@ -234,6 +237,7 @@ public class GenotypesContext implements List<Genotype>, Serializable {
         return ! immutable;
     }
 
+    // TODO: better naming?
     public final void checkImmutability() {
         if ( immutable )
             throw new IllegalAccessError("GenotypeMap is currently immutable, but a mutator method was invoked on it");
@@ -245,6 +249,7 @@ public class GenotypesContext implements List<Genotype>, Serializable {
     //
     // ---------------------------------------------------------------------------
 
+    // TODO: shouldn't functions in this block call checkImmutability() first?
     protected void invalidateSampleNameMap() {
         sampleNameToOffset = null;
     }
@@ -254,8 +259,10 @@ public class GenotypesContext implements List<Genotype>, Serializable {
     }
 
     protected void ensureSampleOrdering() {
+        if ( sampleNamesInOrder == null )
+            sampleNamesInOrder = getGenotypes().stream().map(Genotype::getSampleName).sorted().collect(Collectors.toList());
         if ( sampleNamesInOrder == null ) {
-            sampleNamesInOrder = new ArrayList<String>(size());
+            sampleNamesInOrder = new ArrayList<>(size());
 
             for ( int i = 0; i < size(); i++ ) {
                 sampleNamesInOrder.add(getGenotypes().get(i).getSampleName());
@@ -266,7 +273,7 @@ public class GenotypesContext implements List<Genotype>, Serializable {
 
     protected void ensureSampleNameMap() {
         if ( sampleNameToOffset == null ) {
-            sampleNameToOffset = new HashMap<String, Integer>(size());
+            sampleNameToOffset = new HashMap<>(size());
 
             for ( int i = 0; i < size(); i++ ) {
                 sampleNameToOffset.put(getGenotypes().get(i).getSampleName(), i);
@@ -295,6 +302,9 @@ public class GenotypesContext implements List<Genotype>, Serializable {
         return notToBeDirectlyAccessedGenotypes;
     }
 
+    /**
+     * @throws IllegalStateException if the current object is marked as immutable.
+     */
     @Override
     public void clear() {
         checkImmutability();
@@ -333,12 +343,10 @@ public class GenotypesContext implements List<Genotype>, Serializable {
      * add() followed by any of the SampleNamesInOrder operations is inefficient, as
      * each SampleNamesInOrder must rebuild the sorted list of sample names at
      * an O(n log n) cost.
-     *
-     * @param genotype
-     * @return
      */
     @Override
     public boolean add(final Genotype genotype) {
+        // TODO: should null check be inserted here, blow up, or only invalidate ordering if input is not null/at the end?
         checkImmutability();
         invalidateSampleOrdering();
 
@@ -350,6 +358,9 @@ public class GenotypesContext implements List<Genotype>, Serializable {
         return getGenotypes().add(genotype);
     }
 
+    /**
+     * @throws UnsupportedOperationException always
+     */
     @Override
     public void add(final int i, final Genotype genotype) {
         throw new UnsupportedOperationException();
@@ -360,9 +371,6 @@ public class GenotypesContext implements List<Genotype>, Serializable {
      *
      * See {@link #add(Genotype)} for important information about this functions
      * constraints and performance costs
-     *
-     * @param genotypes
-     * @return
      */
     @Override
     public boolean addAll(final Collection<? extends Genotype> genotypes) {
@@ -380,6 +388,9 @@ public class GenotypesContext implements List<Genotype>, Serializable {
         return getGenotypes().addAll(genotypes);
     }
 
+    /**
+     * @throws UnsupportedOperationException always
+     */
     @Override
     public boolean addAll(final int i, final Collection<? extends Genotype> genotypes) {
         throw new UnsupportedOperationException();
@@ -395,6 +406,7 @@ public class GenotypesContext implements List<Genotype>, Serializable {
         return getGenotypes().containsAll(objects);
     }
 
+    // TODO: remove private unused method
     private boolean containsAny(final Collection<? extends Genotype> genotypes) {
         for ( final Genotype g : genotypes ) {
             if ( contains(g) ) return true;
@@ -411,16 +423,12 @@ public class GenotypesContext implements List<Genotype>, Serializable {
      * What is the max ploidy among all samples?  Returns defaultPloidy if no genotypes are present
      *
      * @param defaultPloidy the default ploidy, if all samples are no-called
-     * @return
      */
     public int getMaxPloidy(final int defaultPloidy) {
         if ( defaultPloidy < 0 ) throw new IllegalArgumentException("defaultPloidy must be greater than or equal to 0");
 
         if ( maxPloidy == -1 ) {
-            maxPloidy = 0; // necessary in the case where there are no genotypes
-            for ( final Genotype g : getGenotypes() ) {
-                maxPloidy = Math.max(g.getPloidy(), maxPloidy);
-            }
+            maxPloidy = getGenotypes().stream().mapToInt(Genotype::getPloidy).max().orElse(0);
 
             // everything is no called so we return the default ploidy
             if ( maxPloidy == 0 ) maxPloidy = defaultPloidy;
@@ -431,9 +439,6 @@ public class GenotypesContext implements List<Genotype>, Serializable {
 
     /**
      * Gets sample associated with this sampleName, or null if none is found
-     *
-     * @param sampleName
-     * @return
      */
     public Genotype get(final String sampleName) {
         Integer offset = getSampleI(sampleName);
@@ -658,9 +663,6 @@ public class GenotypesContext implements List<Genotype>, Serializable {
      * Return a freshly allocated subcontext of this context containing only the samples
      * listed in samples.  Note that samples can contain names not in this context, they
      * will just be ignored.
-     *
-     * @param samples
-     * @return
      */
     public GenotypesContext subsetToSamples( final Set<String> samples ) {
         final int nSamples = samples.size();
@@ -680,30 +682,12 @@ public class GenotypesContext implements List<Genotype>, Serializable {
 
     @Override
     public String toString() {
-        final List<String> gS = new ArrayList<String>();
+        final List<String> gS = new ArrayList<>();
         for ( final Genotype g : this.iterateInSampleNameOrder() )
             gS.add(g.toString());
-        return "[" + join(",", gS) + "]";
-    }
-
-    // copied from Utils
-    private static <T> String join(final String separator, final Collection<T> objects) {
-        if (objects.isEmpty()) { // fast path for empty collection
-            return "";
-        } else {
-            final Iterator<T> iter = objects.iterator();
-            final T first = iter.next();
-
-            if ( ! iter.hasNext() ) // fast path for singleton collections
-                return first.toString();
-            else { // full path for 2+ collection that actually need a join
-                final StringBuilder ret = new StringBuilder(first.toString());
-                while(iter.hasNext()) {
-                    ret.append(separator);
-                    ret.append(iter.next().toString());
-                }
-                return ret.toString();
-            }
-        }
+        if (gS.isEmpty())
+            return "[]";
+        else
+            return "[" + String.join(",", gS) + "]";
     }
 }

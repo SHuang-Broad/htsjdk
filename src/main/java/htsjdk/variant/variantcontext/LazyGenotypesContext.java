@@ -41,10 +41,10 @@ import java.util.Map;
 public class LazyGenotypesContext extends GenotypesContext {
 
     /**
-     * The LazyParser we'll use to decode unparsedGenotypeData if necessary.
+     * The LazyParser we'll use to decode {@link #unparsedGenotypeData} if necessary.
      *
      * Transient because it would be extremely expensive to serialize. Instead, we fully decode
-     * all LazyGenotypesContexts before serializing them.
+     * all {@link LazyGenotypesContext}'s before serializing them.
      */
     private transient LazyParser parser;
 
@@ -57,13 +57,13 @@ public class LazyGenotypesContext extends GenotypesContext {
     private transient Object unparsedGenotypeData;
 
     /**
-     * nUnparsedGenotypes the number of genotypes contained in the unparsedGenotypes data
-     * (known already in the parser).  Useful for isEmpty and size() optimizations
+     * the number of genotypes contained in the {@link #unparsedGenotypeData} data (known already in the parser).
+     * Useful for {@link #isEmpty()} and {@link #size()} optimizations
      */
     private int nUnparsedGenotypes;
 
     /**
-     * True if we've already decoded the values in unparsedGenotypeData
+     * True if we've already decoded the values in {@link #unparsedGenotypeData}
      */
     private boolean loaded = false;
 
@@ -87,7 +87,7 @@ public class LazyGenotypesContext extends GenotypesContext {
         }
     }
 
-    private final static ArrayList<Genotype> EMPTY = new ArrayList<Genotype>(0);
+    private final static ArrayList<Genotype> EMPTY = new ArrayList<>(0);
 
     /**
      * Simple lazy parser interface.  Provide an object implementing this
@@ -97,7 +97,7 @@ public class LazyGenotypesContext extends GenotypesContext {
      * to the LazyGenotypesContext holding encoded genotypes data
      */
     public interface LazyParser {
-        public LazyData parse(Object data);
+        LazyData parse(Object data);
     }
 
     /**
