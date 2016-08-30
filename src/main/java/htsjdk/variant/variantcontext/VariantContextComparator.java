@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * A Comparator that orders VariantContexts by the ordering of the contigs/chromosomes in the List
@@ -23,20 +24,19 @@ public class VariantContextComparator implements Comparator<VariantContext>, Ser
 	private static final long serialVersionUID = 1L;
 
 	public static List<String> getSequenceNameList(final SAMSequenceDictionary dictionary) {
-		final List<String> list = new ArrayList<String>();
-		for (final SAMSequenceRecord record : dictionary.getSequences()) {
-			list.add(record.getSequenceName());
-		}
-		return list;
+		return dictionary.getSequences().stream().map(SAMSequenceRecord::getSequenceName).collect(Collectors.toList());
 	}
 
 	// For fast lookup of the contig's index in the contig list
 	private final Map<String, Integer> contigIndexLookup;
 
+    /**
+     * @throws IllegalArgumentException if the provided list is null or empty, or contains duplicated entries
+     */
 	public VariantContextComparator(final List<String> contigs) {
-		if (contigs.isEmpty()) throw new IllegalArgumentException("One or more contigs must be in the contig list.");
+		if (contigs==null || contigs.isEmpty()) throw new IllegalArgumentException("One or more contigs must be in the contig list.");
 
-		final Map<String, Integer> protoContigIndexLookup = new HashMap<String, Integer>();
+		final Map<String, Integer> protoContigIndexLookup = new HashMap<>();
 		int index = 0;
 		for (final String contig : contigs) {
 			protoContigIndexLookup.put(contig, index++);
@@ -51,11 +51,13 @@ public class VariantContextComparator implements Comparator<VariantContext>, Ser
 
 	/**
 	 * Creates a VariantContextComparator from the given VCF contig header lines. The header lines'
-	 * index values are used to order the contigs. Throws IllegalArgumentException if there are dupe
+	 * index values are used to order the contigs.
+     *
+     * @throws IllegalArgumentException if the provided headerLines is null or empty, or contains dupe
 	 *
 	 */
 	public VariantContextComparator(final Collection<VCFContigHeaderLine> headerLines) {
-		if (headerLines.isEmpty()) throw new IllegalArgumentException("One or more header lines must be in the header line collection.");
+		if (headerLines == null || headerLines.isEmpty()) throw new IllegalArgumentException("One or more header lines must be in the header line collection.");
 
 		final Map<String, Integer> protoContigIndexLookup = new HashMap<String, Integer>();
 		for (final VCFContigHeaderLine headerLine : headerLines) {
