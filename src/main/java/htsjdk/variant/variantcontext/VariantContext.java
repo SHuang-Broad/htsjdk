@@ -49,6 +49,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -85,7 +86,7 @@ import java.util.stream.Collectors;
  * <h3>Working with Variant Contexts</h3>
  * By default, VariantContexts are immutable.  In order to access (in the rare circumstances where you need them)
  * setter routines, you need to create <code>MutableVariantContext</code>s and <code>MutableGenotype</code>s.
- *
+ * TODO: is the above reference to MutableVariantContext still valid? I cannot find the class any more (2016-08-30)
  * <h3>Some example data </h3>
  *<pre>
  * Allele A, Aref, T, Tref;
@@ -155,8 +156,8 @@ import java.util.stream.Collectors;
  *
  * <h4> Converting rods and other data structures to <code>VariantContext</code>s </h4>
  *
- * You can convert many common types into VariantContexts using the general function:
- *
+ * You can convert many common types into <code>VariantContext</code>s using the general function:
+ * TODO: is the following reference to and discussion about the VariantContextAdaptors class still valid? I cannot find the class any more (2016-08-30)
  * <pre>
  * VariantContextAdaptors.convertToVariantContext(name, myObject)
  * </pre>
@@ -269,12 +270,12 @@ public class VariantContext implements Feature, Serializable {
     /* cached monomorphic value: null -> not yet computed, False, True */
     private Boolean monomorphic = null;
 
-    /*
-* Determine which genotype fields are in use in the genotypes in VC
-* @return an ordered list of genotype fields in use in VC.  If vc has genotypes this will always include GT first
-*/
+    /**
+     * Determine which genotype fields are in use in the genotypes in VC
+     * @return an ordered list of genotype fields in use in VC.  If vc has genotypes this will always include GT first
+     */
     public List<String> calcVCFGenotypeKeys(final VCFHeader header) {
-        final Set<String> keys = new HashSet<String>();
+        final Set<String> keys = new HashSet<>();
 
         boolean sawGoodGT = false;
         boolean sawGoodQual = false;
@@ -298,7 +299,7 @@ public class VariantContext implements Feature, Serializable {
         if ( sawPL ) keys.add(VCFConstants.GENOTYPE_PL_KEY);
         if ( sawGenotypeFilter ) keys.add(VCFConstants.GENOTYPE_FILTER_KEY);
 
-        List<String> sortedList = ParsingUtils.sortList(new ArrayList<String>(keys));
+        List<String> sortedList = ParsingUtils.sortList(new ArrayList<>(keys));
 
         // make sure the GT is first
         if (sawGoodGT) {
@@ -351,17 +352,22 @@ public class VariantContext implements Feature, Serializable {
 
     /**
      * the actual constructor.  Private access only
-     *
+     * TODO: since this calls {@link #makeAlleles(Collection)} which currently guarantees ref allele is indexed 0, we should probably document it here as well.
      * @param source          source
      * @param contig          the contig
      * @param start           the start base (one based)
      * @param stop            the stop reference base (one based)
      * @param alleles         alleles
      * @param genotypes       genotypes map
-     * @param log10PError  qual
+     * @param log10PError     qual
      * @param filters         filters: use null for unfiltered and empty set for passes filters
      * @param attributes      attributes
      * @param validationToPerform     set of validation steps to take
+     *
+     * @throws IllegalArgumentException if any of {@code contig}, {@code alleles} is {@code null}, or
+     *                                  if {@code ID} is null or empty string, or
+     *                                  {@code validationToPerform} contains invalid validation modes, or
+     *                                  {@code alleles} is empty, contains duplicated alleles, has no or more than one reference alleles.
      */
     protected VariantContext(final String source,
                              final String ID,
@@ -398,8 +404,8 @@ public class VariantContext implements Feature, Serializable {
         }
 
         // cache the REF and ALT alleles
-        int nAlleles = alleles.size();
-        for ( Allele a : alleles ) {
+        final int nAlleles = alleles.size();
+        for ( final Allele a : alleles ) {
             if ( a.isReference() ) {
                 REF = a;
             } else if ( nAlleles == 2 ) { // only cache ALT when biallelic
@@ -414,6 +420,39 @@ public class VariantContext implements Feature, Serializable {
         }
     }
 
+    /**
+     * TODO: should we document that this guarantees the ref allele is always indexed 0?
+     */
+    private static List<Allele> makeAlleles(Collection<Allele> alleles) {
+        final List<Allele> alleleList = new ArrayList<Allele>(alleles.size());
+
+        boolean sawRef = false;
+        for ( final Allele a : alleles ) {
+            for ( final Allele b : alleleList ) {
+                if ( a.equals(b, true) )
+                    throw new IllegalArgumentException("Duplicate allele added to VariantContext: " + a);
+            }
+
+            // deal with the case where the first allele isn't the reference
+            if ( a.isReference() ) {
+                if ( sawRef )
+                    throw new IllegalArgumentException("Alleles for a VariantContext must contain at most one reference allele: " + alleles);
+                alleleList.add(0, a);
+                sawRef = true;
+            }
+            else
+                alleleList.add(a);
+        }
+
+        if ( alleleList.isEmpty() )
+            throw new IllegalArgumentException("Cannot create a VariantContext with an empty allele list");
+
+        if ( alleleList.get(0).isNonReference() )
+            throw new IllegalArgumentException("Alleles for a VariantContext must contain at least one reference allele: " + alleles);
+
+        return alleleList;
+    }
+
     // ---------------------------------------------------------------------------------------------------------
     //
     // Selectors
@@ -424,7 +463,7 @@ public class VariantContext implements Feature, Serializable {
      * This method subsets down to a set of samples.
      *
      * At the same time returns the alleles to just those in use by the samples,
-     * if rederiveAllelesFromGenotypes is true, otherwise the full set of alleles
+     * if {@code rederiveAllelesFromGenotypes} is true, otherwise the full set of alleles
      * in this VC is returned as the set of alleles in the subContext, even if
      * some of those alleles aren't in the samples
      *
@@ -438,17 +477,14 @@ public class VariantContext implements Feature, Serializable {
         if ( sampleNames.containsAll(getSampleNames()) && ! rederiveAllelesFromGenotypes ) {
             return this; // fast path when you don't have any work to do
         } else {
-            VariantContextBuilder builder = new VariantContextBuilder(this);
-            GenotypesContext newGenotypes = genotypes.subsetToSamples(sampleNames);
+            final VariantContextBuilder builder = new VariantContextBuilder(this);
+            final GenotypesContext newGenotypes = genotypes.subsetToSamples(sampleNames);
 
             if ( rederiveAllelesFromGenotypes ) {
-                Set<Allele> allelesFromGenotypes = allelesOfGenotypes(newGenotypes);
+                final Set<Allele> allelesFromGenotypes = allelesOfGenotypes(newGenotypes);
 
                 // ensure original order of genotypes
-                List<Allele> rederivedAlleles = new ArrayList<Allele>(allelesFromGenotypes.size());
-                for (Allele allele : alleles)
-                    if (allelesFromGenotypes.contains(allele))
-                        rederivedAlleles.add(allele);
+                final List<Allele> rederivedAlleles = alleles.stream().filter(allelesFromGenotypes::contains).collect(Collectors.toList());
 
                 builder.alleles(rederivedAlleles);
             }
@@ -461,10 +497,7 @@ public class VariantContext implements Feature, Serializable {
     }
 
     /**
-     * @see #subContextFromSamples(java.util.Set, boolean) with rederiveAllelesFromGenotypes = true
-     *
-     * @param sampleNames
-     * @return
+     * @see #subContextFromSamples(java.util.Set, boolean) with {@code rederiveAllelesFromGenotype = true}
      */
     public VariantContext subContextFromSamples(final Set<String> sampleNames) {
         return subContextFromSamples(sampleNames, true);
@@ -476,8 +509,7 @@ public class VariantContext implements Feature, Serializable {
 
     /**
      * helper routine for subcontext
-     * @param genotypes genotypes
-     * @return allele set
+     * @return alleles but not including {@link Allele#NO_CALL}.
      */
     private final Set<Allele> allelesOfGenotypes(Collection<Genotype> genotypes) {
         final Set<Allele> alleles = new HashSet<Allele>();
@@ -649,7 +681,7 @@ public class VariantContext implements Feature, Serializable {
                 && getReference().length() > 0           // ref is not null or symbolic
                 && getAlternateAllele(0).length() > 0    // alt is not null or symbolic
                 && getReference().getBases()[0] == getAlternateAllele(0).getBases()[0]    // leading bases match for both alleles
-                && (getReference().length() == 1 || getAlternateAllele(0).length() == 1);
+                && (getReference().length() == 1 || getAlternateAllele(0).length() == 1); // is ins or del
     }
 
     /**
@@ -665,13 +697,9 @@ public class VariantContext implements Feature, Serializable {
 
     public boolean isStructuralIndel() {
         if ( getType() == Type.INDEL ) {
-            List<Integer> sizes = getIndelLengths();
+            final List<Integer> sizes = getIndelLengths(); // what if returned IS null?
             if ( sizes != null ) {
-                for ( Integer length : sizes ) {
-                    if ( length > MAX_ALLELE_SIZE_FOR_NON_SV ) {
-                        return true;
-                    }
-                }
+                return getIndelLengths().stream().mapToInt(sz -> sz).max().orElse(0) > MAX_ALLELE_SIZE_FOR_NON_SV;
             }
         }
         return false;
@@ -696,6 +724,76 @@ public class VariantContext implements Feature, Serializable {
      */
     public boolean isMixed() { return getType() == Type.MIXED; }
 
+    private void determineType() {
+        if ( type == null ) {
+            switch ( getNAlleles() ) {
+                case 0:
+                    throw new IllegalStateException("Unexpected error: requested type of VariantContext with no alleles!" + this);
+                case 1:
+                    // note that this doesn't require a reference allele.  You can be monomorphic independent of having a
+                    // reference allele
+                    type = Type.NO_VARIATION;
+                    break;
+                default:
+                    determinePolymorphicType();
+            }
+        }
+    }
+
+    private void determinePolymorphicType() {
+        type = null;
+
+        // do a pairwise comparison of all alleles against the reference allele
+        for ( final Allele allele : alleles ) {
+            if ( allele == REF )
+                continue;
+
+            // find the type of this allele relative to the reference
+            final Type biallelicType = typeOfBiallelicVariant(REF, allele);
+
+            // for the first alternate allele, set the type to be that one
+            if ( type == null ) {
+                type = biallelicType;
+            }
+            // if the type of this allele is different from that of a previous one, assign it the MIXED type and quit
+            else if ( biallelicType != type ) {
+                type = Type.MIXED;
+                return;
+            }
+        }
+    }
+
+    private static Type typeOfBiallelicVariant(final Allele ref, final Allele allele) {
+        if ( ref.isSymbolic() )
+            throw new IllegalStateException("Unexpected error: encountered a record with a symbolic reference allele");
+
+        if ( allele.isSymbolic() )
+            return Type.SYMBOLIC;
+
+        if ( ref.length() == allele.length() ) {
+            if ( allele.length() == 1 )
+                return Type.SNP;
+            else
+                return Type.MNP;
+        }
+
+        // Important note: previously we were checking that one allele is the prefix of the other.  However, that's not an
+        // appropriate check as can be seen from the following example:
+        // REF = CTTA and ALT = C,CT,CA
+        // This should be assigned the INDEL type but was being marked as a MIXED type because of the prefix check.
+        // In truth, it should be absolutely impossible to return a MIXED type from this method because it simply
+        // performs a pairwise comparison of a single alternate allele against the reference allele (whereas the MIXED type
+        // is reserved for cases of multiple alternate alleles of different types).  Therefore, if we've reached this point
+        // in the code (so we're not a SNP, MNP, or symbolic allele), we absolutely must be an INDEL.
+
+        return Type.INDEL;
+
+        // old incorrect logic:
+        // if (oneIsPrefixOfOther(ref, allele))
+        //     return Type.INDEL;
+        // else
+        //     return Type.MIXED;
+    }
 
     // ---------------------------------------------------------------------------------------------------------
     //
@@ -715,6 +813,73 @@ public class VariantContext implements Feature, Serializable {
         return ID;
     }
 
+    @Deprecated
+    public String getChr() {
+        return getContig();
+    }
+
+    @Override
+    public String getContig() {
+        return contig;
+    }
+
+    /**
+     * @return 1-based inclusive start position of the Variant
+     * INDEL events usually start on the first unaltered reference base before the INDEL
+     *
+     * <strong>Warning:</strong> be aware that the start position of the VariantContext is defined in terms of the start position specified in the
+     * underlying vcf file, VariantContexts representing the same biological event may have different start positions depending on the
+     * specifics of the vcf file they are derived from
+     */
+    public int getStart() {
+        return (int)start;
+    }
+
+    /**
+     * @return 1-based closed end position of the Variant
+     * If the END info field is specified that value is returned, otherwise the end is the start + reference allele length - 1.
+     * For VariantContexts with a single alternate allele, if that allele is an insertion, the end position will be on the reference base
+     * before the insertion event.  If the single alt allele is a deletion, the end will be on the final deleted reference base.
+     */
+    public int getEnd() {
+        return (int)stop;
+    }
+
+    public String toString() {
+        // Note: passing genotypes to String.format() will implicitly decode the genotypes
+        // This may not be desirable, so don't decode by default
+
+        return genotypes.isLazyWithData() ? toStringUnparsedGenotypes() : toStringDecodeGenotypes();
+    }
+
+    public String toStringDecodeGenotypes() {
+        return String.format("[VC %s @ %s Q%s of type=%s alleles=%s attr=%s GT=%s",
+                getSource(), contig + ":" + (start - stop == 0 ? start : start + "-" + stop),
+                hasLog10PError() ? String.format("%.2f", getPhredScaledQual()) : ".",
+                this.getType(),
+                ParsingUtils.sortList(this.getAlleles()),
+                ParsingUtils.sortedString(this.getAttributes()),
+                this.getGenotypes());
+    }
+
+    private String toStringUnparsedGenotypes() {
+        return String.format("[VC %s @ %s Q%s of type=%s alleles=%s attr=%s GT=%s",
+                getSource(), contig + ":" + (start - stop == 0 ? start : start + "-" + stop),
+                hasLog10PError() ? String.format("%.2f", getPhredScaledQual()) : ".",
+                this.getType(),
+                ParsingUtils.sortList(this.getAlleles()),
+                ParsingUtils.sortedString(this.getAttributes()),
+                ((LazyGenotypesContext)this.genotypes).getUnparsedGenotypeData());
+    }
+
+    public String toStringWithoutGenotypes() {
+        return String.format("[VC %s @ %s Q%s of type=%s alleles=%s attr=%s",
+                getSource(), contig + ":" + (start - stop == 0 ? start : start + "-" + stop),
+                hasLog10PError() ? String.format("%.2f", getPhredScaledQual()) : ".",
+                this.getType(),
+                ParsingUtils.sortList(this.getAlleles()),
+                ParsingUtils.sortedString(this.getAttributes()));
+    }
 
     // ---------------------------------------------------------------------------------------------------------
     //
@@ -743,6 +908,7 @@ public class VariantContext implements Feature, Serializable {
     public int getAttributeAsInt(String key, int defaultValue)            { return commonInfo.getAttributeAsInt(key, defaultValue); }
     public double getAttributeAsDouble(String key, double  defaultValue)  { return commonInfo.getAttributeAsDouble(key, defaultValue); }
     public boolean getAttributeAsBoolean(String key, boolean  defaultValue)  { return commonInfo.getAttributeAsBoolean(key, defaultValue); }
+
     /** returns the value as an empty list if the key was not found,
         as a java.util.List if the value is a List or an Array,
         as a Collections.singletonList if there is only one value */
@@ -762,12 +928,11 @@ public class VariantContext implements Feature, Serializable {
      * @return the reference allele for this context
      */
     public Allele getReference() {
-        Allele ref = REF;
+        final Allele ref = REF;
         if ( ref == null )
             throw new IllegalStateException("BUG: no reference allele found at " + this);
         return ref;
     }
-
 
     /**
      * @return true if the context is strictly bi-allelic
@@ -796,16 +961,17 @@ public class VariantContext implements Feature, Serializable {
     }
 
     /**
-     * @return The allele sharing the same bases as this String.  A convenience method; better to use byte[]
+     * A convenience method; better to use {@link #getAllele(byte[])}.
+     * @return The allele sharing the same bases as this String, or null if no such allele is present.
      */
-    public Allele getAllele(String allele) {
+    public Allele getAllele(final String allele) {
         return getAllele(allele.getBytes());
     }
 
     /**
      * @return The allele sharing the same bases as this byte[], or null if no such allele is present.
      */
-    public Allele getAllele(byte[] allele) {
+    public Allele getAllele(final byte[] allele) {
         return Allele.getMatchingAllele(getAlleles(), allele);
     }
 
@@ -833,14 +999,8 @@ public class VariantContext implements Feature, Serializable {
             return true;
 
         final List<Allele> allelesToConsider = considerRefAllele ? getAlleles() : getAlternateAlleles();
-        for ( Allele a : allelesToConsider ) {
-            if ( a.equals(allele, ignoreRefState) )
-                return true;
-        }
-
-        return false;
+        return allelesToConsider.stream().anyMatch(a -> a.equals(allele, ignoreRefState));
     }
-
 
     /**
      * Gets the alleles.  This method should return all of the alleles present at the location,
@@ -859,7 +1019,7 @@ public class VariantContext implements Feature, Serializable {
      * @return the set of alternate alleles
      */
     public List<Allele> getAlternateAlleles() {
-        return alleles.subList(1, alleles.size());
+        return alleles.subList(1, alleles.size()); // TODO: this assumes ref allele is indexed at 0, and currently this is true, but guaranteed by the only write to alleles by makeAlleles()
     }
 
     /**
@@ -872,18 +1032,15 @@ public class VariantContext implements Feature, Serializable {
             return null;
         }
 
-        List<Integer> lengths = new ArrayList<Integer>();
-        for ( Allele a : getAlternateAlleles() ) {
-            lengths.add(a.length() - getReference().length());
-        }
-
-        return lengths;
+        final Integer refLen = getReference().length();
+        return getAlternateAlleles().stream().map(a -> a.length() - refLen).collect(Collectors.toList());
     }
 
     /**
+     * TODO: again this assumes there's a ref allele, and residing at index 0
      * @param i -- the ith allele (from 0 to n - 2 for a context with n alleles including a reference allele)
      * @return the ith non-reference allele in this context
-     * @throws IllegalArgumentException if i is invalid
+     * @throws IndexOutOfBoundsException if i is invalid
      */
     public Allele getAlternateAllele(int i) {
         return alleles.get(i+1);
@@ -892,7 +1049,7 @@ public class VariantContext implements Feature, Serializable {
     /**
      * @param  other  VariantContext whose alleles to compare against
      * @return true if this VariantContext has the same alleles (both ref and alts) as other,
-     *         regardless of ordering. Otherwise returns false.
+     *         regardless of ordering (of the alt alleles) . Otherwise returns false.
      */
     public boolean hasSameAllelesAs ( final VariantContext other ) {
         return hasSameAlternateAllelesAs(other) && other.getReference().equals(getReference(), false);
@@ -904,20 +1061,62 @@ public class VariantContext implements Feature, Serializable {
      *         regardless of ordering. Otherwise returns false.
      */
     public boolean hasSameAlternateAllelesAs ( final VariantContext other ) {
-        List<Allele> thisAlternateAlleles = getAlternateAlleles();
-        List<Allele> otherAlternateAlleles = other.getAlternateAlleles();
+        final List<Allele> thisAlternateAlleles = getAlternateAlleles();
+        final List<Allele> otherAlternateAlleles = other.getAlternateAlleles();
 
         if ( thisAlternateAlleles.size() != otherAlternateAlleles.size() ) {
             return false;
         }
 
-        for ( Allele allele : thisAlternateAlleles ) {
-            if ( ! otherAlternateAlleles.contains(allele) ) {
-                return false;
-            }
-        }
+        return thisAlternateAlleles.stream().allMatch(otherAlternateAlleles::contains);
+    }
 
-        return true;
+    public boolean hasSymbolicAlleles() {
+        return hasSymbolicAlleles(getAlleles());
+    }
+
+    public static boolean hasSymbolicAlleles( final List<Allele> alleles ) {
+        return alleles.stream().anyMatch(Allele::isSymbolic);
+    }
+
+    public Allele getAltAlleleWithHighestAlleleCount() {
+        // optimization: for bi-allelic sites, just return the only alt allele
+        if ( isBiallelic() )
+            return getAlternateAllele(0);
+
+        return getAlternateAlleles().stream()
+                .map(allele -> new Tuple<>(allele, getCalledChrCount(allele)))
+                .max((alleleAndCount1, alleleAndCount2) -> Integer.compare(alleleAndCount1.b, alleleAndCount2.b))
+                .get()
+                .a;
+    }
+
+    /**
+     * Lookup the index of allele in this variant context
+     *
+     * @param allele the allele whose index we want to get
+     * @return the index of the allele into getAlleles(), or -1 if it cannot be found
+     */
+    public int getAlleleIndex(final Allele allele) {
+        return getAlleles().indexOf(allele);
+    }
+
+    /**
+     * Return the allele index #getAlleleIndex for each allele in alleles
+     *
+     * @param alleles the alleles we want to look up
+     * @return a list of indices for each allele, in order
+     */
+    public List<Integer> getAlleleIndices(final Collection<Allele> alleles) {
+        return alleles.stream()
+                .map(this::getAlleleIndex)
+                .collect(Collectors.toCollection(() -> new ArrayList<>(alleles.size())));
+    }
+
+    public int[] getGLIndecesOfAlternateAllele(final Allele targetAllele) {
+        final int index = getAlleleIndex(targetAllele);
+        if ( index == -1 ) throw new IllegalArgumentException("Allele " + targetAllele + " not in this VariantContex " + this);
+        return GenotypeLikelihoods.getPLIndecesOfAlleles(0, index);
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -940,7 +1139,7 @@ public class VariantContext implements Feature, Serializable {
         return ! genotypes.isEmpty();
     }
 
-    public boolean hasGenotypes(Collection<String> sampleNames) {
+    public boolean hasGenotypes(final Collection<String> sampleNames) {
         return genotypes.containsSamples(sampleNames);
     }
 
@@ -955,7 +1154,7 @@ public class VariantContext implements Feature, Serializable {
         return genotypes.iterateInSampleNameOrder();
     }
 
-    public Iterable<Genotype> getGenotypesOrderedBy(Iterable<String> sampleOrdering) {
+    public Iterable<Genotype> getGenotypesOrderedBy(final Iterable<String> sampleOrdering) {
         return genotypes.iterateInSampleNameOrder(sampleOrdering);
     }
 
@@ -967,7 +1166,7 @@ public class VariantContext implements Feature, Serializable {
      * @return mapping from sample name to genotype
      * @throws IllegalArgumentException if sampleName isn't bound to a genotype
      */
-    public GenotypesContext getGenotypes(String sampleName) {
+    public GenotypesContext getGenotypes(final String sampleName) {
         return getGenotypes(Collections.singleton(sampleName));
     }
 
@@ -989,7 +1188,6 @@ public class VariantContext implements Feature, Serializable {
         return getGenotypes().subsetToSamples(sampleNames);
     }
 
-
     /**
      * @return the set of all sample names in this context, not ordered
      */
@@ -1006,11 +1204,11 @@ public class VariantContext implements Feature, Serializable {
      *
      * @return the Genotype associated with the given sample in this context or null if the sample is not in this context
      */
-    public Genotype getGenotype(String sample) {
+    public Genotype getGenotype(final String sample) {
         return getGenotypes().get(sample);
     }
 
-    public boolean hasGenotype(String sample) {
+    public boolean hasGenotype(final String sample) {
         return getGenotypes().containsSample(sample);
     }
 
@@ -1369,150 +1567,6 @@ public class VariantContext implements Feature, Serializable {
 
     // ---------------------------------------------------------------------------------------------------------
     //
-    // utility routines
-    //
-    // ---------------------------------------------------------------------------------------------------------
-
-    private void determineType() {
-        if ( type == null ) {
-            switch ( getNAlleles() ) {
-                case 0:
-                    throw new IllegalStateException("Unexpected error: requested type of VariantContext with no alleles!" + this);
-                case 1:
-                    // note that this doesn't require a reference allele.  You can be monomorphic independent of having a
-                    // reference allele
-                    type = Type.NO_VARIATION;
-                    break;
-                default:
-                    determinePolymorphicType();
-            }
-        }
-    }
-
-    private void determinePolymorphicType() {
-        type = null;
-
-        // do a pairwise comparison of all alleles against the reference allele
-        for ( Allele allele : alleles ) {
-            if ( allele == REF )
-                continue;
-
-            // find the type of this allele relative to the reference
-            Type biallelicType = typeOfBiallelicVariant(REF, allele);
-
-            // for the first alternate allele, set the type to be that one
-            if ( type == null ) {
-                type = biallelicType;
-            }
-            // if the type of this allele is different from that of a previous one, assign it the MIXED type and quit
-            else if ( biallelicType != type ) {
-                type = Type.MIXED;
-                return;
-            }
-        }
-    }
-
-    private static Type typeOfBiallelicVariant(Allele ref, Allele allele) {
-        if ( ref.isSymbolic() )
-            throw new IllegalStateException("Unexpected error: encountered a record with a symbolic reference allele");
-
-        if ( allele.isSymbolic() )
-            return Type.SYMBOLIC;
-
-        if ( ref.length() == allele.length() ) {
-            if ( allele.length() == 1 )
-                return Type.SNP;
-            else
-                return Type.MNP;
-        }
-
-        // Important note: previously we were checking that one allele is the prefix of the other.  However, that's not an
-        // appropriate check as can be seen from the following example:
-        // REF = CTTA and ALT = C,CT,CA
-        // This should be assigned the INDEL type but was being marked as a MIXED type because of the prefix check.
-        // In truth, it should be absolutely impossible to return a MIXED type from this method because it simply
-        // performs a pairwise comparison of a single alternate allele against the reference allele (whereas the MIXED type
-        // is reserved for cases of multiple alternate alleles of different types).  Therefore, if we've reached this point
-        // in the code (so we're not a SNP, MNP, or symbolic allele), we absolutely must be an INDEL.
-
-        return Type.INDEL;
-
-        // old incorrect logic:
-        // if (oneIsPrefixOfOther(ref, allele))
-        //     return Type.INDEL;
-        // else
-        //     return Type.MIXED;
-    }
-
-    public String toString() {
-        // Note: passing genotypes to String.format() will implicitly decode the genotypes
-        // This may not be desirable, so don't decode by default
-
-        return genotypes.isLazyWithData() ? toStringUnparsedGenotypes() : toStringDecodeGenotypes();
-    }
-
-    public String toStringDecodeGenotypes() {
-        return String.format("[VC %s @ %s Q%s of type=%s alleles=%s attr=%s GT=%s",
-                getSource(), contig + ":" + (start - stop == 0 ? start : start + "-" + stop),
-                hasLog10PError() ? String.format("%.2f", getPhredScaledQual()) : ".",
-                this.getType(),
-                ParsingUtils.sortList(this.getAlleles()),
-                ParsingUtils.sortedString(this.getAttributes()),
-                this.getGenotypes());
-    }
-
-    private String toStringUnparsedGenotypes() {
-        return String.format("[VC %s @ %s Q%s of type=%s alleles=%s attr=%s GT=%s",
-                getSource(), contig + ":" + (start - stop == 0 ? start : start + "-" + stop),
-                hasLog10PError() ? String.format("%.2f", getPhredScaledQual()) : ".",
-                this.getType(),
-                ParsingUtils.sortList(this.getAlleles()),
-                ParsingUtils.sortedString(this.getAttributes()),
-                ((LazyGenotypesContext)this.genotypes).getUnparsedGenotypeData());
-    }
-
-    public String toStringWithoutGenotypes() {
-        return String.format("[VC %s @ %s Q%s of type=%s alleles=%s attr=%s",
-                getSource(), contig + ":" + (start - stop == 0 ? start : start + "-" + stop),
-                hasLog10PError() ? String.format("%.2f", getPhredScaledQual()) : ".",
-                this.getType(),
-                ParsingUtils.sortList(this.getAlleles()),
-                ParsingUtils.sortedString(this.getAttributes()));
-    }
-
-    // protected basic manipulation routines
-    private static List<Allele> makeAlleles(Collection<Allele> alleles) {
-        final List<Allele> alleleList = new ArrayList<Allele>(alleles.size());
-
-        boolean sawRef = false;
-        for ( final Allele a : alleles ) {
-            for ( final Allele b : alleleList ) {
-                if ( a.equals(b, true) )
-                    throw new IllegalArgumentException("Duplicate allele added to VariantContext: " + a);
-            }
-
-            // deal with the case where the first allele isn't the reference
-            if ( a.isReference() ) {
-                if ( sawRef )
-                    throw new IllegalArgumentException("Alleles for a VariantContext must contain at most one reference allele: " + alleles);
-                alleleList.add(0, a);
-                sawRef = true;
-            }
-            else
-                alleleList.add(a);
-        }
-
-        if ( alleleList.isEmpty() )
-            throw new IllegalArgumentException("Cannot create a VariantContext with an empty allele list");
-
-        if ( alleleList.get(0).isNonReference() )
-            throw new IllegalArgumentException("Alleles for a VariantContext must contain at least one reference allele: " + alleles);
-
-        return alleleList;
-    }
-
-    // ---------------------------------------------------------------------------------------------------------
-    //
     // Fully decode
     //
     // ---------------------------------------------------------------------------------------------------------
@@ -1545,6 +1599,12 @@ public class VariantContext implements Feature, Serializable {
     public boolean isFullyDecoded() {
         return fullyDecoded;
     }
+
+    // ---------------------------------------------------------------------------------------------------------
+    //
+    // tribble integration routines -- not for public consumption
+    //
+    // ---------------------------------------------------------------------------------------------------------
 
     private final void fullyDecodeInfo(final VariantContextBuilder builder, final VCFHeader header, final boolean lenientDecoding) {
         builder.attributes(fullyDecodeAttributes(getAttributes(), header, lenientDecoding));
@@ -1646,90 +1706,5 @@ public class VariantContext implements Feature, Serializable {
     private final Genotype fullyDecodeGenotypes(final Genotype g, final VCFHeader header) {
         final Map<String, Object> map = fullyDecodeAttributes(g.getExtendedAttributes(), header, true);
         return new GenotypeBuilder(g).attributes(map).make();
-    }
-
-    // ---------------------------------------------------------------------------------------------------------
-    //
-    // tribble integration routines -- not for public consumption
-    //
-    // ---------------------------------------------------------------------------------------------------------
-    @Deprecated
-    public String getChr() {
-        return getContig();
-    }
-
-    @Override
-    public String getContig() {
-        return contig;
-    }
-
-    /**
-     * @return 1-based inclusive start position of the Variant
-     * INDEL events usually start on the first unaltered reference base before the INDEL
-     * 
-     * <strong>Warning:</strong> be aware that the start position of the VariantContext is defined in terms of the start position specified in the
-     * underlying vcf file, VariantContexts representing the same biological event may have different start positions depending on the
-     * specifics of the vcf file they are derived from
-     */
-    public int getStart() {
-        return (int)start;
-    }
-
-    /**
-     * @return 1-based closed end position of the Variant
-     * If the END info field is specified that value is returned, otherwise the end is the start + reference allele length - 1.
-     * For VariantContexts with a single alternate allele, if that allele is an insertion, the end position will be on the reference base
-     * before the insertion event.  If the single alt allele is a deletion, the end will be on the final deleted reference base.
-     */
-    public int getEnd() {
-        return (int)stop;
-    }
-
-    public boolean hasSymbolicAlleles() {
-        return hasSymbolicAlleles(getAlleles());
-    }
-
-    public static boolean hasSymbolicAlleles( final List<Allele> alleles ) {
-        return alleles.stream().anyMatch(Allele::isSymbolic);
-    }
-
-    public Allele getAltAlleleWithHighestAlleleCount() {
-        // optimization: for bi-allelic sites, just return the only alt allele
-        if ( isBiallelic() )
-            return getAlternateAllele(0);
-
-        return getAlternateAlleles().stream()
-                .map(allele -> new Tuple<>(allele, getCalledChrCount(allele)))
-                .max((alleleAndCount1, alleleAndCount2) -> Integer.compare(alleleAndCount1.b, alleleAndCount2.b))
-                .get()
-                .a;
-    }
-
-    /**
-     * Lookup the index of allele in this variant context
-     *
-     * @param allele the allele whose index we want to get
-     * @return the index of the allele into getAlleles(), or -1 if it cannot be found
-     */
-    public int getAlleleIndex(final Allele allele) {
-        return getAlleles().indexOf(allele);
-    }
-
-    /**
-     * Return the allele index #getAlleleIndex for each allele in alleles
-     *
-     * @param alleles the alleles we want to look up
-     * @return a list of indices for each allele, in order
-     */
-    public List<Integer> getAlleleIndices(final Collection<Allele> alleles) {
-        return alleles.stream()
-                .map(this::getAlleleIndex)
-                .collect(Collectors.toCollection(() -> new ArrayList<>(alleles.size())));
-    }
-
-    public int[] getGLIndecesOfAlternateAllele(Allele targetAllele) {
-        final int index = getAlleleIndex(targetAllele);
-        if ( index == -1 ) throw new IllegalArgumentException("Allele " + targetAllele + " not in this VariantContex " + this);
-        return GenotypeLikelihoods.getPLIndecesOfAlleles(0, index);
     }
 }

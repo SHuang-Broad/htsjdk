@@ -362,7 +362,7 @@ public class VariantContextUtils {
 
           */
 
-    static public boolean isTransition(final VariantContext vc) throws IllegalArgumentException {
+    public static boolean isTransition(final VariantContext vc) throws IllegalArgumentException {
         final byte refAllele = vc.getReference().getBases()[0];
         final Collection<Allele> altAlleles = vc.getAlternateAlleles();
 
