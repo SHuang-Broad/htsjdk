@@ -1237,16 +1237,10 @@ public class VariantContext implements Feature, Serializable {
      * @param sampleIds IDs of samples to take into account. If empty then all samples are included.
      * @return chromosome count
      */
-    public int getCalledChrCount(Set<String> sampleIds) {
-        int n = 0;
-        GenotypesContext genotypes = sampleIds.isEmpty() ? getGenotypes() : getGenotypes(sampleIds);
+    public int getCalledChrCount(final Set<String> sampleIds) {
+        final GenotypesContext genotypes = sampleIds.isEmpty() ? getGenotypes() : getGenotypes(sampleIds);
 
-        for ( final Genotype g : genotypes) {
-            for ( final Allele a : g.getAlleles() )
-                n += a.isNoCall() ? 0 : 1;
-        }
-
-        return n;
+        return (int) genotypes.stream().flatMap(gt -> gt.getAlleles().stream().filter(Allele::isNoCall)).count();
     }
 
     /**
@@ -1255,8 +1249,8 @@ public class VariantContext implements Feature, Serializable {
      * @param a allele
      * @return chromosome count
      */
-    public int getCalledChrCount(Allele a) {
-        return getCalledChrCount(a,new HashSet<String>(0));
+    public int getCalledChrCount(final Allele a) {
+        return getCalledChrCount(a,new HashSet<>(0));
     }
 
     /**
@@ -1266,20 +1260,15 @@ public class VariantContext implements Feature, Serializable {
      * @param sampleIds - IDs of samples to take into account. If empty then all samples are included.
      * @return chromosome count
      */
-    public int getCalledChrCount(Allele a, Set<String> sampleIds) {
-        int n = 0;
-        GenotypesContext genotypes = sampleIds.isEmpty() ? getGenotypes() : getGenotypes(sampleIds);
+    public int getCalledChrCount(final Allele a, final Set<String> sampleIds) {
+        final GenotypesContext genotypes = sampleIds.isEmpty() ? getGenotypes() : getGenotypes(sampleIds);
 
-        for ( final Genotype g : genotypes ) {
-            n += g.countAllele(a);
-        }
-
-        return n;
+        return genotypes.stream().mapToInt(gt -> gt.countAllele(a)).sum();
     }
 
     /**
      * Genotype-specific functions -- are the genotypes monomorphic w.r.t. to the alleles segregating at this
-     * site?  That is, is the number of alternate alleles among all fo the genotype == 0?
+     * site?  That is, is the number of alternate alleles among all of the genotype == 0?
      *
      * @return true if it's monomorphic
      */
@@ -1291,7 +1280,7 @@ public class VariantContext implements Feature, Serializable {
 
     /**
      * Genotype-specific functions -- are the genotypes polymorphic w.r.t. to the alleles segregating at this
-     * site?  That is, is the number of alternate alleles among all fo the genotype &gt; 0?
+     * site?  That is, is the number of alternate alleles among all of the genotype &gt; 0?
      *
      * @return true if it's polymorphic
      */
@@ -1395,9 +1384,9 @@ public class VariantContext implements Feature, Serializable {
         }
     }
 
-    public void validateRSIDs(Set<String> rsIDs) {
+    public void validateRSIDs(final Set<String> rsIDs) {
         if ( rsIDs != null && hasID() ) {
-            for ( String id : getID().split(VCFConstants.ID_FIELD_SEPARATOR) ) {
+            for ( final String id : getID().split(VCFConstants.ID_FIELD_SEPARATOR) ) {
                 if ( id.startsWith("rs") && !rsIDs.contains(id) )
                     throw new TribbleException.InternalCodecException(String.format("the rsID %s for the record at position %s:%d is not in dbSNP", id, getContig(), getStart()));
             }
@@ -1410,30 +1399,20 @@ public class VariantContext implements Feature, Serializable {
 
         // maintain a list of non-symbolic alleles reported in the REF and ALT fields of the record
         // (we exclude symbolic alleles because it's commonly expected that they don't show up in the genotypes, e.g. with GATK gVCFs)
-        final List<Allele> reportedAlleles = new ArrayList<Allele>();
-        for ( final Allele allele : getAlleles() ) {
-            if ( !allele.isSymbolic() )
-                reportedAlleles.add(allele);
-        }
+        final List<Allele> reportedAlleles = getAlleles().stream().filter(a -> !a.isSymbolic()).collect(Collectors.toList());
 
         // maintain a list of non-symbolic alleles observed in the genotypes
-        final Set<Allele> observedAlleles = new HashSet<Allele>();
+        final Set<Allele> observedAlleles = new LinkedHashSet<Allele>();
         observedAlleles.add(getReference());
-        for ( final Genotype g : getGenotypes() ) {
-            if ( g.isCalled() ) {
-                for ( final Allele allele : g.getAlleles() ) {
-                    if ( !allele.isSymbolic() )
-                        observedAlleles.add(allele);
-                }
-            }
-        }
-        if ( observedAlleles.contains(Allele.NO_CALL) )
-            observedAlleles.remove(Allele.NO_CALL);
+        observedAlleles.addAll( getGenotypes().stream().filter(Genotype::isCalled)
+                                                        .flatMap(g -> g.getAlleles().stream())
+                                                        .filter(a -> !a.isSymbolic()).collect(Collectors.toList()) );
+        observedAlleles.remove(Allele.NO_CALL);
 
         if ( reportedAlleles.size() != observedAlleles.size() )
             throw new TribbleException.InternalCodecException(String.format("one or more of the ALT allele(s) for the record at position %s:%d are not observed at all in the sample genotypes", getContig(), getStart()));
 
-        int originalSize = reportedAlleles.size();
+        final int originalSize = reportedAlleles.size();
         // take the intersection and see if things change
         observedAlleles.retainAll(reportedAlleles);
         if ( observedAlleles.size() != originalSize )
@@ -1446,8 +1425,8 @@ public class VariantContext implements Feature, Serializable {
 
         // AN
         if ( hasAttribute(VCFConstants.ALLELE_NUMBER_KEY) ) {
-            int reportedAN = Integer.valueOf(getAttribute(VCFConstants.ALLELE_NUMBER_KEY).toString());
-            int observedAN = getCalledChrCount();
+            final int reportedAN = Integer.valueOf(getAttribute(VCFConstants.ALLELE_NUMBER_KEY).toString());
+            final int observedAN = getCalledChrCount();
             if ( reportedAN != observedAN )
                 throw new TribbleException.InternalCodecException(String.format("the Allele Number (AN) tag is incorrect for the record at position %s:%d, %d vs. %d", getContig(), getStart(), reportedAN, observedAN));
         }
