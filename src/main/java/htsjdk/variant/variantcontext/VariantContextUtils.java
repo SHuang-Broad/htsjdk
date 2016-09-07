@@ -37,15 +37,8 @@ import htsjdk.variant.vcf.VCFInfoHeaderLine;
 import org.apache.commons.jexl2.Expression;
 import org.apache.commons.jexl2.JexlEngine;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class VariantContextUtils {
     private static Set<String> MISSING_KEYS_WARNED_ABOUT = new HashSet<String>();
@@ -94,7 +87,7 @@ public class VariantContextUtils {
      * @param removeStaleValues should we remove stale values from the mapping?
      * @return the attributes map provided as input, returned for programming convenience
      */
-    public static Map<String, Object> calculateChromosomeCounts(VariantContext vc, Map<String, Object> attributes, boolean removeStaleValues) {
+    public static Map<String, Object> calculateChromosomeCounts(final VariantContext vc, final Map<String, Object> attributes, final boolean removeStaleValues) {
         return calculateChromosomeCounts(vc, attributes,  removeStaleValues, new HashSet<String>(0));
     }
 
@@ -109,7 +102,7 @@ public class VariantContextUtils {
      *                  If empty or null, counts are generated for all samples as unrelated individuals
      * @return the attributes map provided as input, returned for programming convenience
      */
-    public static Map<String, Object> calculateChromosomeCounts(VariantContext vc, Map<String, Object> attributes, boolean removeStaleValues, final Set<String> founderIds) {
+    public static Map<String, Object> calculateChromosomeCounts(final VariantContext vc, final Map<String, Object> attributes, final boolean removeStaleValues, final Set<String> founderIds) {
         final int AN = vc.getCalledChrCount();
 
         // if everyone is a no-call, remove the old attributes if requested
@@ -128,21 +121,16 @@ public class VariantContextUtils {
 
             // if there are alternate alleles, record the relevant tags
             if (!vc.getAlternateAlleles().isEmpty()) {
-                ArrayList<Double> alleleFreqs = new ArrayList<Double>();
-                ArrayList<Integer> alleleCounts = new ArrayList<Integer>();
-                ArrayList<Integer> foundersAlleleCounts = new ArrayList<Integer>();
+                final ArrayList<Double> alleleFreqs = new ArrayList<Double>();
+                final ArrayList<Integer> alleleCounts = new ArrayList<Integer>();
+                final ArrayList<Integer> foundersAlleleCounts = new ArrayList<Integer>();
                 double totalFoundersChromosomes = (double)vc.getCalledChrCount(founderIds);
                 int foundersAltChromosomes;
-                for ( Allele allele : vc.getAlternateAlleles() ) {
+                for ( final Allele allele : vc.getAlternateAlleles() ) {
                     foundersAltChromosomes = vc.getCalledChrCount(allele,founderIds);
-                    alleleCounts.add(vc.getCalledChrCount(allele));
                     foundersAlleleCounts.add(foundersAltChromosomes);
-                    if ( AN == 0 ) {
-                        alleleFreqs.add(0.0);
-                    } else {
-                        final Double freq = (double)foundersAltChromosomes / totalFoundersChromosomes;
-                        alleleFreqs.add(freq);
-                    }
+                    alleleCounts.add(vc.getCalledChrCount(allele));
+                    alleleFreqs.add( AN == 0 ? 0.0 : (double)foundersAltChromosomes / totalFoundersChromosomes );
                 }
 
                 attributes.put(VCFConstants.ALLELE_COUNT_KEY, alleleCounts.size() == 1 ? alleleCounts.get(0) : alleleCounts);
@@ -164,8 +152,8 @@ public class VariantContextUtils {
      * @param builder     the VariantContextBuilder we are updating
      * @param removeStaleValues should we remove stale values from the mapping?
      */
-    public static void calculateChromosomeCounts(VariantContextBuilder builder, boolean removeStaleValues) {
-        VariantContext vc = builder.make();
+    public static void calculateChromosomeCounts(final VariantContextBuilder builder, final boolean removeStaleValues) {
+        final VariantContext vc = builder.make();
         builder.attributes(calculateChromosomeCounts(vc, new HashMap<>(vc.getAttributes()), removeStaleValues, new HashSet<>(0)));
     }
 
@@ -178,8 +166,8 @@ public class VariantContextUtils {
      *                   If empty or null, counts are generated for all samples as unrelated individuals
      * @param removeStaleValues should we remove stale values from the mapping?
      */
-    public static void calculateChromosomeCounts(VariantContextBuilder builder, boolean removeStaleValues, final Set<String> founderIds) {
-        VariantContext vc = builder.make();
+    public static void calculateChromosomeCounts(final VariantContextBuilder builder, final boolean removeStaleValues, final Set<String> founderIds) {
+        final VariantContext vc = builder.make();
         builder.attributes(calculateChromosomeCounts(vc, new HashMap<>(vc.getAttributes()), removeStaleValues, founderIds));
     }
 
@@ -205,15 +193,15 @@ public class VariantContextUtils {
      * A simple but common wrapper for matching VariantContext objects using JEXL expressions
      */
     public static class JexlVCMatchExp {
-        public String name;
-        public Expression exp;
+        public final String name;
+        public final Expression exp;
 
         /**
          * Create a new matcher expression with name and JEXL expression exp
          * @param name name
          * @param exp  expression
          */
-        public JexlVCMatchExp(String name, Expression exp) {
+        public JexlVCMatchExp(final String name, final Expression exp) {
             this.name = name;
             this.exp = exp;
         }
@@ -221,7 +209,7 @@ public class VariantContextUtils {
 
     /**
      * Method for creating JexlVCMatchExp from input walker arguments names and exps.  These two arrays contain
-     * the name associated with each JEXL expression. initializeMatchExps will parse each expression and return
+     * the name associated with each JEXL expression. initializeMatchExps will eagerly parse each expression and return
      * a list of JexlVCMatchExp, in order, that correspond to the names and exps.  These are suitable input to
      * match() below.
      *
@@ -229,14 +217,14 @@ public class VariantContextUtils {
      * @param exps  expressions
      * @return list of matches
      */
-    public static List<JexlVCMatchExp> initializeMatchExps(String[] names, String[] exps) {
+    public static List<JexlVCMatchExp> initializeMatchExps(final String[] names, final String[] exps) {
         if ( names == null || exps == null )
             throw new IllegalArgumentException("BUG: neither names nor exps can be null: names " + Arrays.toString(names) + " exps=" + Arrays.toString(exps) );
 
         if ( names.length != exps.length )
             throw new IllegalArgumentException("Inconsistent number of provided filter names and expressions: names=" + Arrays.toString(names) + " exps=" + Arrays.toString(exps));
 
-        Map<String, String> map = new HashMap<String, String>();
+        final Map<String, String> map = new HashMap<String, String>();
         for ( int i = 0; i < names.length; i++ ) { map.put(names[i], exps[i]); }
 
         return VariantContextUtils.initializeMatchExps(map);
@@ -244,7 +232,7 @@ public class VariantContextUtils {
 
     /**
      * Method for creating JexlVCMatchExp from input walker arguments names and exps.  These two lists contain
-     * the name associated with each JEXL expression. initializeMatchExps will parse each expression and return
+     * the name associated with each JEXL expression. initializeMatchExps will eagerly parse each expression and return
      * a list of JexlVCMatchExp, in order, that correspond to the names and exps.  These are suitable input to
      * match() below.
      *
@@ -252,34 +240,35 @@ public class VariantContextUtils {
      * @param exps  expressions
      * @return list of matches
      */
-    public static List<JexlVCMatchExp> initializeMatchExps(List<String> names, List<String> exps) {
-        String[] nameArray = new String[names.size()];
-        String[] expArray = new String[exps.size()];
+    public static List<JexlVCMatchExp> initializeMatchExps(final List<String> names, final List<String> exps) {
+        final String[] nameArray = new String[names.size()];
+        final String[] expArray = new String[exps.size()];
         return initializeMatchExps(names.toArray(nameArray), exps.toArray(expArray));
     }
 
 
     /**
      * Method for creating JexlVCMatchExp from input walker arguments mapping from names to exps.  These two arrays contain
-     * the name associated with each JEXL expression. initializeMatchExps will parse each expression and return
+     * the name associated with each JEXL expression. initializeMatchExps will eagerly parse each expression and return
      * a list of JexlVCMatchExp, in order, that correspond to the names and exps.  These are suitable input to
      * match() below.
      *
-     * @param names_and_exps mapping of names to expressions
+     * @param namesAndExps mapping of names to expressions
      * @return list of matches
      */
-    public static List<JexlVCMatchExp> initializeMatchExps(Map<String, String> names_and_exps) {
-        List<JexlVCMatchExp> exps = new ArrayList<>();
+    public static List<JexlVCMatchExp> initializeMatchExps(final Map<String, String> namesAndExps) {
 
-        for ( Map.Entry<String, String> elt : names_and_exps.entrySet() ) {
-            String name = elt.getKey();
-            String expStr = elt.getValue();
+        final List<JexlVCMatchExp> exps = new ArrayList<>(namesAndExps.size());
+
+        for ( final Map.Entry<String, String> elt : namesAndExps.entrySet() ) {
+            final String name = elt.getKey();
+            final String expStr = elt.getValue();
 
             if ( name == null || expStr == null ) throw new IllegalArgumentException("Cannot create null expressions : " + name +  " " + expStr);
             try {
-                Expression exp = engine.get().createExpression(expStr);
+                final Expression exp = engine.get().createExpression(expStr);
                 exps.add(new JexlVCMatchExp(name, exp));
-            } catch (Exception e) {
+            } catch (final Exception e) {
                 throw new IllegalArgumentException("Argument " + name + "has a bad value. Invalid expression used (" + expStr + "). Please see the JEXL docs for correct syntax.") ;
             }
         }
@@ -293,7 +282,7 @@ public class VariantContextUtils {
      * @param exp   expression
      * @return true if there is a match
      */
-    public static boolean match(VariantContext vc, JexlVCMatchExp exp) {
+    public static boolean match(final VariantContext vc, final JexlVCMatchExp exp) {
         return match(vc, Collections.singletonList(exp)).get(exp);
     }
 
@@ -307,9 +296,8 @@ public class VariantContextUtils {
      * @param exps expressions
      * @return true if there is a match
      */
-    public static Map<JexlVCMatchExp, Boolean> match(VariantContext vc, Collection<JexlVCMatchExp> exps) {
+    public static Map<JexlVCMatchExp, Boolean> match(final VariantContext vc, final Collection<JexlVCMatchExp> exps) {
         return new JEXLMap(exps,vc);
-
     }
 
     /**
@@ -319,7 +307,7 @@ public class VariantContextUtils {
      * @param exp   expression
      * @return true if there is a match
      */
-    public static boolean match(VariantContext vc, Genotype g, JexlVCMatchExp exp) {
+    public static boolean match(final VariantContext vc, final Genotype g, final JexlVCMatchExp exp) {
         return match(vc,g, Collections.singletonList(exp)).get(exp);
     }
 
@@ -334,7 +322,7 @@ public class VariantContextUtils {
      * @param exps expressions
      * @return true if there is a match
      */
-    public static Map<JexlVCMatchExp, Boolean> match(VariantContext vc, Genotype g, Collection<JexlVCMatchExp> exps) {
+    public static Map<JexlVCMatchExp, Boolean> match(final VariantContext vc, final Genotype g, final Collection<JexlVCMatchExp> exps) {
         return new JEXLMap(exps,vc,g);
     }
 
@@ -359,12 +347,8 @@ public class VariantContextUtils {
      * @param vc a biallelic polymorphic SNP
      * @return true if a transition and false if transversion
      * @throws IllegalArgumentException if vc is monomorphic, not a SNP or not bi-allelic.
-
-          */
-
+     */
     public static boolean isTransition(final VariantContext vc) throws IllegalArgumentException {
-        final byte refAllele = vc.getReference().getBases()[0];
-        final Collection<Allele> altAlleles = vc.getAlternateAlleles();
 
         if(vc.getType() == VariantContext.Type.NO_VARIATION) {
             throw new IllegalArgumentException("Variant context is monomorphic: " + vc.toString());
@@ -374,11 +358,13 @@ public class VariantContextUtils {
             throw new IllegalArgumentException("Variant context is not a SNP: " + vc.toString());
         }
 
+        final Collection<Allele> altAlleles = vc.getAlternateAlleles();
         if(altAlleles.size() != 1 ) {
             throw new IllegalArgumentException("Expected exactly 1 alternative Allele. Found: " + altAlleles.size());
         }
 
         final Byte altAllele = altAlleles.iterator().next().getBases()[0];
+        final byte refAllele = vc.getReference().getBases()[0];
 
         return (refAllele == 'A' && altAllele == 'G')
                 || (refAllele == 'G' && altAllele == 'A')
@@ -392,7 +378,7 @@ public class VariantContextUtils {
      * @param vc  variant context
      * @return  new VC without genotypes
      */
-    public static VariantContext sitesOnlyVariantContext(VariantContext vc) {
+    public static VariantContext sitesOnlyVariantContext(final VariantContext vc) {
         return new VariantContextBuilder(vc).noGenotypes().make();
     }
 
@@ -401,22 +387,16 @@ public class VariantContextUtils {
      * @param vcs  collection of VCs
      * @return new VCs without genotypes
      */
-    public static Collection<VariantContext> sitesOnlyVariantContexts(Collection<VariantContext> vcs) {
-        List<VariantContext> r = new ArrayList<VariantContext>();
-        for ( VariantContext vc : vcs )
-            r.add(sitesOnlyVariantContext(vc));
-        return r;
+    public static Collection<VariantContext> sitesOnlyVariantContexts(final Collection<VariantContext> vcs) {
+        return vcs.stream().map(VariantContextUtils::sitesOnlyVariantContext).collect(Collectors.toCollection(ArrayList::new));
     }
 
-    public static int getSize( VariantContext vc ) {
+    public static int getSize( final VariantContext vc ) {
         return vc.getEnd() - vc.getStart() + 1;
     }
 
     public static Set<String> genotypeNames(final Collection<Genotype> genotypes) {
-        final Set<String> names = new HashSet<String>(genotypes.size());
-        for ( final Genotype g : genotypes )
-            names.add(g.getSampleName());
-        return names;
+        return genotypes.stream().map(Genotype::getSampleName).collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     /**
@@ -440,7 +420,7 @@ public class VariantContextUtils {
 
         if ( VariantContext.hasSymbolicAlleles(alleles) ) {
             if ( endForSymbolicAlleles == -1 )
-                throw new IllegalStateException("computeEndFromAlleles found a symbolic allele but endForSymbolicAlleles was provided");
+                throw new IllegalStateException("computeEndFromAlleles found a symbolic allele but endForSymbolicAlleles was NOT provided");
             return endForSymbolicAlleles;
         } else {
             return start + Math.max(ref.length() - 1, 0);
