@@ -174,7 +174,7 @@ public class VariantContextBuilder {
     }
 
     public List<Allele> getAlleles() {
-        return new ArrayList<Allele>(alleles);
+        return new ArrayList<>(alleles);
     }
 
     /**
@@ -193,8 +193,7 @@ public class VariantContextBuilder {
      * @param attributes a Map of attributes to replace any existing attributes with
      */
     public VariantContextBuilder attributes(final Map<String, ?> attributes) {
-        this.attributes = new HashMap<>();
-        if (attributes != null) this.attributes.putAll(attributes);
+        this.attributes = (attributes != null) ? new HashMap<>(attributes) : new HashMap<>();
         this.attributesCanBeModified = true;
         return this;
     }
@@ -302,8 +301,6 @@ public class VariantContextBuilder {
      * Tells this builder that the resulting <code>VariantContext</code> should use this genotype's <code>GenotypeContext</code>.
      *
      * Note that genotypes can be <code>null</code> -&gt; meaning there are no genotypes
-     *
-     * @param genotypes
      */
     public VariantContextBuilder genotypes(final GenotypesContext genotypes) {
         this.genotypes = genotypes;
@@ -321,8 +318,6 @@ public class VariantContextBuilder {
      * Tells this builder that the resulting <code>VariantContext</code> should use a <code>GenotypeContext</code> containing genotypes
      *
      * Note that genotypes can be <code>null</code>, meaning there are no genotypes
-     *
-     * @param genotypes
      */
     public VariantContextBuilder genotypes(final Collection<Genotype> genotypes) {
         return genotypes(GenotypesContext.copy(genotypes));
@@ -330,7 +325,6 @@ public class VariantContextBuilder {
 
     /**
      * Tells this builder that the resulting <code>VariantContext</code> should use a <code>GenotypeContext</code> containing genotypes
-     * @param genotypes
      */
     public VariantContextBuilder genotypes(final Genotype ... genotypes) {
         return genotypes(GenotypesContext.copy(Arrays.asList(genotypes)));
@@ -340,13 +334,12 @@ public class VariantContextBuilder {
      * Tells this builder that the resulting VariantContext should not contain any GenotypeContext
      */
     public VariantContextBuilder noGenotypes() {
-        this.genotypes = null;
+        this.genotypes = null; // TODO: shouldn't this be: this.genotypes = GenotypesContext.NO_GENOTYPES
         return this;
     }
 
     /**
      * Tells us that the resulting VariantContext should have ID
-     * @param ID
      * @return
      */
     public VariantContextBuilder id(final String ID) {
@@ -364,7 +357,6 @@ public class VariantContextBuilder {
 
     /**
      * Tells us that the resulting VariantContext should have log10PError
-     * @param log10PError
      * @return
      */
     public VariantContextBuilder log10PError(final double log10PError) {
@@ -374,7 +366,6 @@ public class VariantContextBuilder {
 
     /**
      * Tells us that the resulting VariantContext should have source field set to source
-     * @param source
      * @return
      */
     public VariantContextBuilder source(final String source) {
@@ -488,8 +479,8 @@ public class VariantContextBuilder {
         return make(false);
     }
 
-    public VariantContext make(final boolean leaveModifyableAsIs) {
-        if(!leaveModifyableAsIs) attributesCanBeModified = false;
+    public VariantContext make(final boolean leaveModifiableAsIs) {
+        if(!leaveModifiableAsIs) attributesCanBeModified = false;
 
         return new VariantContext(source, ID, contig, start, stop, alleles,
                 genotypes, log10PError, filters, attributes,
